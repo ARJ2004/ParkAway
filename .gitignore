@@ -1,0 +1,43 @@
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+out/
+.next/
+
+# React Native / Expo
+.expo/
+.expo-shared/
+ios/Pods/
+ios/build/
+android/app/build/
+android/.gradle/
+*.jsbundle
+
+# Testing
+coverage/
+playwright-report/
+test-results/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Claude Code local scratch
+.claude/settings.local.json
