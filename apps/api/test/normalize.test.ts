@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEmail, normalizePhone, normalizeRegistrationNumber } from "../src/lib/normalize.js";
+import {
+  isValidIndianRegistrationNumber,
+  normalizeEmail,
+  normalizePhone,
+  normalizeRegistrationNumber,
+} from "../src/lib/normalize.js";
 
 describe("normalizePhone", () => {
   it("normalizes a bare 10-digit number to E.164", () => {
@@ -38,6 +43,38 @@ describe("normalizePhone", () => {
 describe("normalizeRegistrationNumber", () => {
   it("uppercases and strips whitespace", () => {
     expect(normalizeRegistrationNumber(" mh 12 ab 1234 ")).toBe("MH12AB1234");
+  });
+});
+
+describe("isValidIndianRegistrationNumber", () => {
+  it("accepts the standard format with a 2-letter series", () => {
+    expect(isValidIndianRegistrationNumber("KA05HR1096")).toBe(true);
+  });
+
+  it("accepts a single-digit RTO code and no series letters", () => {
+    expect(isValidIndianRegistrationNumber("DL1AB1234")).toBe(true);
+    expect(isValidIndianRegistrationNumber("MH121234")).toBe(true);
+  });
+
+  it("rejects a plate missing the 4-digit number", () => {
+    expect(isValidIndianRegistrationNumber("KA05HR")).toBe(false);
+  });
+
+  it("rejects a plate with more than 4 trailing digits", () => {
+    expect(isValidIndianRegistrationNumber("KA05HR10960")).toBe(false);
+  });
+
+  it("rejects a plate with a 3-letter state code", () => {
+    expect(isValidIndianRegistrationNumber("KAR05HR1096")).toBe(false);
+  });
+
+  it("rejects lowercase input — callers must normalize first", () => {
+    expect(isValidIndianRegistrationNumber("ka05hr1096")).toBe(false);
+  });
+
+  it("rejects garbage input", () => {
+    expect(isValidIndianRegistrationNumber("NOTAPLATE")).toBe(false);
+    expect(isValidIndianRegistrationNumber("")).toBe(false);
   });
 });
 

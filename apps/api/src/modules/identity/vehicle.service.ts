@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { vehicles } from "../../db/schema.js";
 import { ConflictError, NotFoundError, ValidationError } from "../../lib/errors.js";
-import { normalizeRegistrationNumber } from "../../lib/normalize.js";
+import { isValidIndianRegistrationNumber, normalizeRegistrationNumber } from "../../lib/normalize.js";
 import { isUniqueViolation, pgConstraintName } from "../../lib/pgErrors.js";
 
 const VALID_TYPES = ["hatchback", "sedan", "suv", "bike", "commercial"] as const;
 type VehicleType = (typeof VALID_TYPES)[number];
 
-const REGISTRATION_UNIQUE_CONSTRAINT = "vehicles_user_id_registration_no_active_idx";
+const REGISTRATION_UNIQUE_CONSTRAINT = "vehicles_registration_no_active_idx";
 const DEFAULT_UNIQUE_CONSTRAINT = "vehicles_user_id_default_unique_idx";
 
 export interface AddVehicleParams {
@@ -27,8 +27,10 @@ export async function addVehicle(db: Db, userId: string, params: AddVehicleParam
   }
 
   const registrationNo = normalizeRegistrationNumber(params.registrationNo);
-  if (registrationNo.length < 4) {
-    throw new ValidationError("registrationNo is too short");
+  if (!isValidIndianRegistrationNumber(registrationNo)) {
+    throw new ValidationError(
+      "registrationNo must be a valid Indian registration number, e.g. KA05HR1096 (state code, RTO code, optional series, 4-digit number)"
+    );
   }
 
   return db.transaction(async (tx) => {
@@ -71,7 +73,13 @@ export async function addVehicle(db: Db, userId: string, params: AddVehicleParam
       }
 
       if (constraint === REGISTRATION_UNIQUE_CONSTRAINT) {
-        throw new ConflictError("DUPLICATE_VEHICLE", "This registration number is already registered on your account");
+        // Global uniqueness (confirmed with the user 2026-09-21): this plate
+        // is active on some account right now — not necessarily this one —
+        // so the message must not imply it's already on "your" account.
+        throw new ConflictError(
+          "DUPLICATE_VEHICLE",
+          "This registration number is already active on another account. If you've bought this vehicle, ask the previous owner to remove it from their account first."
+        );
       }
       throw err;
     }

@@ -1,0 +1,2 @@
+DROP INDEX "vehicles_user_id_registration_no_active_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "vehicles_registration_no_active_idx" ON "vehicles" USING btree ("registration_no") WHERE "vehicles"."status" = 'active';

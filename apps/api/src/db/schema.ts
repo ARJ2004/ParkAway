@@ -114,13 +114,15 @@ export const vehicles = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    // Partial unique index: duplicate check is scoped to active vehicles only,
-    // and only within the same user_id. Sprint 1 open item (see docs/planning/
-    // 04-sprint-1-detailed-plan.md, Risk #6): this does NOT prevent two
-    // different users from both having the same plate active simultaneously —
-    // that's an explicit product decision still pending, not an oversight.
-    userIdRegistrationNoActiveIdx: uniqueIndex("vehicles_user_id_registration_no_active_idx")
-      .on(table.userId, table.registrationNo)
+    // Partial unique index, GLOBAL (not scoped to user_id) — confirmed with
+    // the user 2026-09-21, resolving the Sprint 1 open item in
+    // docs/planning/04-sprint-1-detailed-plan.md (Risk #6). At most one
+    // *active* vehicle row may exist for a given plate across the entire
+    // system at a time — the same plate can never be active on two different
+    // accounts simultaneously. A previous owner must deactivate their
+    // vehicle record before a new owner can register the same plate.
+    registrationNoActiveIdx: uniqueIndex("vehicles_registration_no_active_idx")
+      .on(table.registrationNo)
       .where(sql`${table.status} = 'active'`),
     // Database-enforced "at most one default vehicle per user" — this is the
     // real correctness guarantee, not the application-level unset-then-set

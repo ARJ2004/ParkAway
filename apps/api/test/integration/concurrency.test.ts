@@ -26,6 +26,7 @@ let rotateRefreshToken: typeof import("../../src/modules/auth/session.service.js
 let issueSession: typeof import("../../src/modules/auth/session.service.js").issueSession;
 let addVehicle: typeof import("../../src/modules/identity/vehicle.service.js").addVehicle;
 let updateVehicle: typeof import("../../src/modules/identity/vehicle.service.js").updateVehicle;
+let ConflictError: typeof import("../../src/lib/errors.js").ConflictError;
 let users: typeof import("../../src/db/schema.js").users;
 let vehicles: typeof import("../../src/db/schema.js").vehicles;
 let refreshTokens: typeof import("../../src/db/schema.js").refreshTokens;
@@ -52,7 +53,7 @@ beforeAll(async () => {
   process.env.REDIS_URL = `redis://:${REDIS_PASSWORD}@${redisContainer.getHost()}:${redisContainer.getMappedPort(6379)}`;
   process.env.JWT_ACCESS_SECRET = "test-secret-at-least-32-characters-long";
   process.env.SMS_PROVIDER = "mock";
-  process.env.DEV_OTP_BYPASS_CODE = "1234";
+  process.env.DEV_OTP_BYPASS_CODE = "123456"; // must match OTP_LENGTH (6) — see env.ts's boot-time validation
   delete process.env.SEED_ADMIN_EMAIL;
   delete process.env.SEED_ADMIN_PASSWORD;
 
@@ -74,6 +75,9 @@ beforeAll(async () => {
   const vehicleMod = await import("../../src/modules/identity/vehicle.service.js");
   addVehicle = vehicleMod.addVehicle;
   updateVehicle = vehicleMod.updateVehicle;
+
+  const errorsMod = await import("../../src/lib/errors.js");
+  ConflictError = errorsMod.ConflictError;
 
   const schemaMod = await import("../../src/db/schema.js");
   users = schemaMod.users;
@@ -106,8 +110,8 @@ describe("OTP verify concurrency", () => {
     await requestOtp(db, { phone, ip: "127.0.0.1", otpProvider: mockOtpProvider });
 
     const [resultA, resultB] = await Promise.allSettled([
-      verifyOtp(db, { phone, code: "1234", ip: "127.0.0.1" }),
-      verifyOtp(db, { phone, code: "1234", ip: "127.0.0.1" }),
+      verifyOtp(db, { phone, code: "123456", ip: "127.0.0.1" }),
+      verifyOtp(db, { phone, code: "123456", ip: "127.0.0.1" }),
     ]);
 
     const outcomes = [resultA, resultB];
@@ -177,5 +181,30 @@ describe("Vehicle default-swap concurrency", () => {
     const rows = await db.select().from(vehicles).where(eqFn(vehicles.userId, user.id));
     const defaults = rows.filter((r) => r.isDefault);
     expect(defaults).toHaveLength(1);
+  });
+});
+
+describe("Vehicle registration uniqueness (global, not per-user)", () => {
+  it("rejects a second user registering a plate that's already active on a different account", async () => {
+    const owner = await createTestUser("+919800000004");
+    const buyer = await createTestUser("+919800000005");
+
+    await addVehicle(db, owner.id, { registrationNo: "KA05HR1096", type: "sedan" });
+
+    const attempt = addVehicle(db, buyer.id, { registrationNo: "KA05HR1096", type: "sedan" });
+    await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+    await expect(attempt).rejects.toMatchObject({ code: "DUPLICATE_VEHICLE" });
+  });
+
+  it("allows the plate again once the previous owner deactivates their vehicle", async () => {
+    const owner = await createTestUser("+919800000006");
+    const buyer = await createTestUser("+919800000007");
+
+    const sold = await addVehicle(db, owner.id, { registrationNo: "KA05HR2000", type: "suv" });
+    await updateVehicle(db, owner.id, sold.id, { status: "inactive" });
+
+    const reregistered = await addVehicle(db, buyer.id, { registrationNo: "KA05HR2000", type: "suv" });
+    expect(reregistered.registrationNo).toBe("KA05HR2000");
+    expect(reregistered.userId).toBe(buyer.id);
   });
 });

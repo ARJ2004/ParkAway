@@ -10,13 +10,33 @@ export function isUniqueViolation(err: unknown): boolean {
 /**
  * Which unique constraint was violated, so callers can decide the right
  * recovery action per constraint rather than treating every 23505 the same
- * way. Parsed from the error message text (present on both the outer
- * DrizzleQueryError and the inner PostgresError `.cause`) rather than a
- * driver-specific field, so it doesn't depend on postgres.js's exact error
- * shape.
+ * way.
+ *
+ * Checks both the outer error and `.cause` (drizzle-orm wraps the real
+ * PostgresError inside a DrizzleQueryError). Reads postgres.js's
+ * `constraint_name` field directly rather than regex-parsing `.message` —
+ * an earlier version used `messageOf(err) ?? messageOf(getCause(err))`,
+ * which never actually reached the cause: the outer DrizzleQueryError's
+ * `.message` is always the SQL query text (a non-empty string), so the `??`
+ * short-circuited before ever looking at the cause's message, where the
+ * "duplicate key value violates unique constraint "..."" text actually
+ * lives. That meant this function silently always returned undefined,
+ * and both call sites' constraint-specific recovery logic (the default-
+ * vehicle race retry in vehicle.service.ts, and this same duplicate-
+ * registration check) never actually ran — caught by the Testcontainers
+ * test for global vehicle-registration uniqueness, which asserted the
+ * *converted* ConflictError, not just "something rejected."
  */
 export function pgConstraintName(err: unknown): string | undefined {
-  const message = messageOf(err) ?? messageOf(getCause(err));
+  return constraintNameOf(err) ?? constraintNameOf(getCause(err));
+}
+
+function constraintNameOf(err: unknown): string | undefined {
+  if (typeof err !== "object" || err === null) return undefined;
+  if ("constraint_name" in err && typeof (err as { constraint_name: unknown }).constraint_name === "string") {
+    return (err as { constraint_name: string }).constraint_name;
+  }
+  const message = messageOf(err);
   return message ? /constraint "([^"]+)"/.exec(message)?.[1] : undefined;
 }
 

@@ -25,6 +25,19 @@ export function normalizeRegistrationNumber(raw: string): string {
   return raw.replace(/\s+/g, "").toUpperCase();
 }
 
+/**
+ * Standard Indian vehicle registration format: 2-letter state code, 1-2 digit
+ * RTO district code, 0-2 letter series (many plates have none, or up to 2 —
+ * e.g. "KA05HR1096"), 4-digit unique number. Deliberately excludes newer/rarer
+ * formats (BH-series, diplomatic, defence) — this is a single-micro-market
+ * India pilot, not a national rollout; revisit if a real user hits this.
+ */
+const INDIAN_REGISTRATION_NUMBER_RE = /^[A-Z]{2}[0-9]{1,2}[A-Z]{0,2}[0-9]{4}$/;
+
+export function isValidIndianRegistrationNumber(normalized: string): boolean {
+  return INDIAN_REGISTRATION_NUMBER_RE.test(normalized);
+}
+
 export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
