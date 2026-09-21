@@ -1,0 +1,28 @@
+.row {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-border-strong);
+  transition: background-color var(--motion-base) var(--motion-easing), width var(--motion-base) var(--motion-easing);
+}
+
+/*
+ * Deliberately NOT a "step 2 of 5, you're behind" bar-with-numbers treatment —
+ * that reads as pressure on what's meant to be a recommended, skippable
+ * moment. Soft dots that just orient ("you're partway through, almost done")
+ * without quantifying how much is "left" to feel obligated to finish.
+ */
+.dotActive {
+  background: var(--color-accent);
+  width: 20px;
+}
+
+.dotDone {
+  background: var(--color-success);
+}

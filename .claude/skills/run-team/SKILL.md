@@ -32,6 +32,7 @@ As Meera, analyze the request and produce:
 - **Acceptance Criteria** (numbered, testable — pull from the functional spec's acceptance-criteria style: normal flow, invalid flow, state change, audit record)
 - **Out of Scope**
 - **Scope check** — which feature module(s) this touches (`docs/planning/01-feature-modules-and-architecture.md` §2) and their priority/phase. **If the request touches a P2/P3 module** (Monthly/Recurring, Corporate, Event Parking, Parking OS/B2B, ANPR/IoT, dynamic pricing) **flag it explicitly** and require the user to confirm they want to build ahead of the PRD §12 pilot validation gate, rather than silently proceeding.
+- **User Experience Flow** — for anything spanning more than one screen/step: the actual walk-through (screen → action → next screen), the happy path and its forks (permission denied, validation failure, first-time vs. returning user), and for onboarding-shaped tickets specifically, the minimum path to value vs. what can be deferred. Ground this in real reference flows via the Mobbin MCP (`search_flows`) where useful — cite what inspired it, and note it's inspiration for the *sequence*, not a screen spec to copy.
 - **Routing decision** (which team members are needed)
 
 If the request is ambiguous, state the assumptions you are making rather than asking questions (since we're in full-team mode).
@@ -58,6 +59,8 @@ As Kavya (for client-surface tasks) and/or Rohan (for backend tasks), produce:
 
 **Kavya — Frontend/Mobile Plan:**
 - Which client surface(s) this touches (Driver Mobile App, Driver Web, Host/Owner App, Property Manager Web Console, Security Guard App, Admin Web Console)
+- **Design research & visual direction** — for any new screen/flow: what real reference patterns were pulled via the Mobbin MCP (`search_flows`/`search_screens`/`search_sections`) and what specific, surface-appropriate visual direction this ticket takes (tone, density, type/color intent per the surface's design philosophy). The output must not default to a generic/AI-slop look — state explicitly what makes this screen ParkAway's own rather than an interchangeable template. If the Mobbin MCP isn't connected yet, say so and note what you'd search for instead of skipping this step silently.
+- **Reusable components** — which existing `ui-web`/`ui-native`/`design-tokens` primitives are reused (as-is or via a new variant/prop), and which are genuinely new and need to be added to the shared package rather than built inline for this screen only. A screen-specific one-off component is the exception, not the default — call it out if one is truly warranted.
 - Screens/views/components to create or modify
 - API integration plan (matching Arjun's contract)
 - Form/validation approach for the fields involved
@@ -111,6 +114,8 @@ As Arjun, produce a short sign-off checklist before work begins:
 - [ ] Divya's test plan covers the concurrency/idempotency cases the spec requires, not just the happy path
 - [ ] Any external integration goes through the provider-adapter interface, not a direct SDK call
 - [ ] Audit trail fields are present for every status-changing action
+- [ ] Any new screen/flow has a stated design direction grounded in real reference research (Mobbin), not a generic/default look, and the UX flow (not just the acceptance criteria) has been thought through for multi-step tickets
+- [ ] New UI is built from shared `ui-web`/`ui-native` components where a fitting primitive/variant exists, and any genuinely new component is added to the shared package (not left as one-off screen code)
 - [ ] Feature is confirmed in-scope for the current phase, or the P2/P3 exception was explicitly approved by the user
 - [ ] Nikhil's deployment notes (if applicable) don't reveal a blocker on the current EC2 setup
 - [ ] Any blockers or dependencies called out
@@ -135,6 +140,7 @@ These come directly from the functional spec and the locked architecture decisio
 10. **A confirmed booking's price/policy snapshot is immutable.** Later pricing or policy changes never retroactively alter it (`BKG-02`, `HOST-03`).
 11. **Postgres and Redis are currently reachable over the internet by design (development phase only), and that has an expiry.** Both must have strong auth (Redis `requirepass`/ACL, never no-auth) even now. Before production launch, both move behind the private/security-group-restricted setup — bound to localhost or a private interface, reachable only by the Fastify process (`docs/tech-stack.md` §10). Treat this as a tracked pre-launch task, not an assumption that it'll happen automatically.
 12. **Anything touching a hold, booking, payment, or webhook needs a concurrency/idempotency test, not just a happy-path test**, per spec §24 — two-simultaneous-booking races and duplicate/out-of-order webhook cases are named explicitly and are not optional coverage.
+13. **UI must never read as AI-generated-default.** Every new screen/flow is researched first (Mobbin MCP — `search_flows`/`search_screens`/`search_sections`) and given a considered, surface-appropriate visual language — see `frontend.md`'s design philosophy. No single reskinned template stretched across all six client surfaces, no generic component-library-default look presented as finished.
 
 ---
 

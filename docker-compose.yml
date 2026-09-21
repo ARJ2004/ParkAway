@@ -1,0 +1,44 @@
+name: parkaway
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-parkaway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env — no default, per non-negotiable rule 11 (strong auth even in dev)}
+      POSTGRES_DB: ${POSTGRES_DB:-parkaway}
+    ports:
+      # Host-side port is 55432, not the default 5432 — this dev machine has a
+      # separate native Postgres install already bound to 5432, and Docker
+      # Desktop forwards to it silently (no port-conflict error) if we ask for
+      # 5432 here too. Container-internal port stays 5432; only the host
+      # mapping changes. DATABASE_URL in .env must match (see .env.example).
+      - "${POSTGRES_HOST_PORT:-55432}:5432"
+    volumes:
+      - parkaway_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-parkaway} -d ${POSTGRES_DB:-parkaway}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env — no default, per non-negotiable rule 11 (strong auth even in dev, never no-auth)}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env — no default, per non-negotiable rule 11 (strong auth even in dev, never no-auth)}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - parkaway_redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  parkaway_postgres_data:
+  parkaway_redis_data:

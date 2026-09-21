@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "vehicles_user_id_default_unique_idx" ON "vehicles" USING btree ("user_id") WHERE "vehicles"."is_default" = true;
