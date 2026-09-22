@@ -33,7 +33,7 @@ export function VehicleFormScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]} edges={["bottom", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <Card style={styles.card}>
           {error && <InlineBanner variant="danger">{error}</InlineBanner>}

@@ -2,13 +2,11 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useTheme } from "@parkaway/ui-native";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "./AuthContext";
+import { MainTabs } from "./MainTabs";
 import { PhoneEntryScreen } from "../screens/PhoneEntryScreen";
 import { OtpEntryScreen } from "../screens/OtpEntryScreen";
 import { OnboardingProfileScreen } from "../screens/OnboardingProfileScreen";
 import { OnboardingVehicleScreen } from "../screens/OnboardingVehicleScreen";
-import { HomeScreen } from "../screens/HomeScreen";
-import { ProfileScreen } from "../screens/ProfileScreen";
-import { VehicleListScreen } from "../screens/VehicleListScreen";
 import { VehicleFormScreen } from "../screens/VehicleFormScreen";
 
 export type AuthStackParamList = {
@@ -21,10 +19,17 @@ export type OnboardingStackParamList = {
   OnboardingVehicle: undefined;
 };
 
+/**
+ * The logged-in app is a stack with exactly two entries: the tab navigator
+ * (MainTabs — Home/Vehicles/Profile, see MainTabs.tsx) and VehicleForm,
+ * pushed on top with a native header + back button when reached from any
+ * tab. This is what lets `navigation.navigate("VehicleForm")` work from
+ * inside a tab screen (React Navigation resolves an unrecognized screen name
+ * by walking up to the parent navigator) without VehicleForm itself living
+ * inside the tab bar.
+ */
 export type AppStackParamList = {
-  Home: undefined;
-  Profile: undefined;
-  Vehicles: undefined;
+  MainTabs: undefined;
   VehicleForm: undefined;
 };
 
@@ -69,13 +74,17 @@ export function RootNavigator() {
 
   return (
     <AppStack.Navigator screenOptions={screenOptions}>
-      <AppStack.Screen name="Home" component={HomeScreen} />
-      <AppStack.Screen name="Profile" component={ProfileScreen} />
-      <AppStack.Screen name="Vehicles" component={VehicleListScreen} />
+      <AppStack.Screen name="MainTabs" component={MainTabs} />
       <AppStack.Screen
         name="VehicleForm"
         component={VehicleFormScreen}
-        options={{ headerShown: true, title: "Add vehicle" }}
+        options={{
+          headerShown: true,
+          title: "Add vehicle",
+          headerStyle: { backgroundColor: theme.colors.surface },
+          headerTintColor: theme.colors.textPrimary,
+          headerShadowVisible: false,
+        }}
       />
     </AppStack.Navigator>
   );

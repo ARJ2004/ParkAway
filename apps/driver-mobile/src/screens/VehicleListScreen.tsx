@@ -1,17 +1,22 @@
-import { Button, EmptyState, useTheme } from "@parkaway/ui-native";
+import { Badge, Button, EmptyState, useTheme } from "@parkaway/ui-native";
+import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import type { CompositeScreenProps } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useCallback, useState } from "react";
 import { FlatList, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useFocusEffect } from "@react-navigation/native";
-import { AppHeader } from "../components/AppHeader";
 import { deactivateVehicle, listVehicles, setDefaultVehicle, type Vehicle } from "../api/vehicles";
+import type { MainTabParamList } from "../navigation/MainTabs";
 import type { AppStackParamList } from "../navigation/RootNavigator";
 
-type Props = NativeStackScreenProps<AppStackParamList, "Vehicles">;
+type Props = CompositeScreenProps<BottomTabScreenProps<MainTabParamList, "Vehicles">, NativeStackScreenProps<AppStackParamList>>;
 
+/** Card-based garage list — plate + type/model as the primary line, a themed icon tile, and an inline Default/Set-default affordance, rather than plain bordered text rows. */
 export function VehicleListScreen({ navigation }: Props) {
   const theme = useTheme();
+  const c = theme.colors;
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -19,8 +24,6 @@ export function VehicleListScreen({ navigation }: Props) {
     listVehicles().then((res) => setVehicles(res.vehicles.filter((v) => v.status === "active")));
   }, []);
 
-  // Refetch whenever this tab/screen regains focus (e.g. after adding a
-  // vehicle on VehicleForm and navigating back), not just on first mount.
   useFocusEffect(load);
 
   async function handleSetDefault(id: string) {
@@ -44,13 +47,10 @@ export function VehicleListScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-      <AppHeader navigation={navigation} />
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <View style={styles.header}>
-        <Text style={[styles.heading, { color: theme.colors.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
-          Vehicles
-        </Text>
-        <Button onPress={() => navigation.navigate("VehicleForm")}>Add vehicle</Button>
+        <Text style={[styles.heading, { color: c.textPrimary, fontFamily: theme.fonts.headingBold }]}>Vehicles</Text>
+        <Button onPress={() => navigation.navigate("VehicleForm")}>Add</Button>
       </View>
 
       {vehicles.length === 0 ? (
@@ -66,30 +66,36 @@ export function VehicleListScreen({ navigation }: Props) {
           data={vehicles}
           keyExtractor={(v) => v.id}
           renderItem={({ item }) => (
-            <View style={[styles.row, { borderColor: theme.colors.border }]}>
-              <View>
-                <Text style={[styles.reg, { color: theme.colors.textPrimary, fontFamily: theme.fonts.bodySemibold }]}>
+            <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
+              <View style={[styles.iconWrap, { backgroundColor: item.isDefault ? c.accentSoft : c.background }]}>
+                <Ionicons name="car-sport" size={20} color={item.isDefault ? c.accent : c.textMuted} />
+              </View>
+              <View style={styles.info}>
+                <Text style={[styles.plate, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
                   {item.registrationNo}
                 </Text>
-                <Text style={[styles.meta, { color: theme.colors.textSecondary, fontFamily: theme.fonts.body }]}>
+                <Text style={[styles.meta, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
                   {item.type}
                   {item.makeModel ? ` · ${item.makeModel}` : ""}
                 </Text>
-                {item.isDefault && (
-                  <Text style={[styles.defaultTag, { color: theme.colors.success, fontFamily: theme.fonts.bodyMedium }]}>
-                    Default
+                <View style={styles.actions}>
+                  {item.isDefault ? (
+                    <Badge label="Default" variant="success" />
+                  ) : (
+                    <Text
+                      style={[styles.link, { color: c.accent, fontFamily: theme.fonts.bodyMedium }]}
+                      onPress={() => handleSetDefault(item.id)}
+                    >
+                      {busyId === item.id ? "Setting…" : "Set as default"}
+                    </Text>
+                  )}
+                  <Text
+                    style={[styles.link, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}
+                    onPress={() => handleRemove(item.id)}
+                  >
+                    {busyId === item.id ? "" : "Remove"}
                   </Text>
-                )}
-              </View>
-              <View style={styles.actions}>
-                {!item.isDefault && (
-                  <Button variant="secondary" onPress={() => handleSetDefault(item.id)} loading={busyId === item.id}>
-                    Set default
-                  </Button>
-                )}
-                <Button variant="skip" onPress={() => handleRemove(item.id)} loading={busyId === item.id}>
-                  Remove
-                </Button>
+                </View>
               </View>
             </View>
           )}
@@ -101,12 +107,28 @@ export function VehicleListScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  header: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", padding: 24, paddingBottom: 12 },
-  heading: { fontSize: 22 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  heading: { fontSize: 26 },
   list: { paddingHorizontal: 24, paddingBottom: 24, gap: 12 },
-  row: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 8 },
-  reg: { fontSize: 16, letterSpacing: 0.5 },
+  card: {
+    flexDirection: "row",
+    gap: 14,
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "flex-start",
+  },
+  iconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  info: { flex: 1, gap: 4 },
+  plate: { fontSize: 16, letterSpacing: 0.3 },
   meta: { fontSize: 13 },
-  defaultTag: { fontSize: 12 },
-  actions: { flexDirection: "row", gap: 8, flexWrap: "wrap" },
+  actions: { flexDirection: "row", gap: 16, marginTop: 4 },
+  link: { fontSize: 13 },
 });

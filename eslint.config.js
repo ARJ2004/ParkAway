@@ -31,6 +31,25 @@ const baseTsRules = {
   "no-console": ["warn", { allow: ["warn", "error"] }],
 };
 
+// Catches exactly the mistake that's broken this monorepo's Vite/Metro
+// bundling twice already (see CLAUDE.md's ".js-import-extension trap"):
+// writing a relative import with a `.js` suffix — a habit that's only
+// correct in apps/api (strict Node ESM), copied by muscle memory into
+// everywhere else, where Vite/Metro don't resolve it to the `.ts` source.
+const noJsExtensionOnRelativeImportsRules = {
+  "no-restricted-syntax": [
+    "warn",
+    {
+      selector: "ImportDeclaration[source.value=/^\\.{1,2}\\/.*\\.js$/]",
+      message: "Relative imports here must NOT have a .js extension (Vite/Metro won't resolve it to the .ts source) — only apps/api needs that.",
+    },
+    {
+      selector: "ExportNamedDeclaration[source.value=/^\\.{1,2}\\/.*\\.js$/]",
+      message: "Relative re-exports here must NOT have a .js extension (Vite/Metro won't resolve it to the .ts source) — only apps/api needs that.",
+    },
+  ],
+};
+
 const reactRules = {
   ...reactPlugin.configs.flat.recommended.rules,
   ...reactHooksPlugin.configs.recommended.rules,
@@ -68,7 +87,7 @@ export default tseslint.config(
       globals: { ...globals.browser },
     },
     plugins: { "@typescript-eslint": tseslint.plugin, react: reactPlugin, "react-hooks": reactHooksPlugin },
-    rules: { ...baseTsRules, ...reactRules },
+    rules: { ...baseTsRules, ...reactRules, ...noJsExtensionOnRelativeImportsRules },
     settings: { react: { version: "18.3" } },
   },
 
@@ -81,7 +100,7 @@ export default tseslint.config(
       globals: { ...globals.browser },
     },
     plugins: { "@typescript-eslint": tseslint.plugin, react: reactPlugin, "react-hooks": reactHooksPlugin },
-    rules: { ...baseTsRules, ...reactRules },
+    rules: { ...baseTsRules, ...reactRules, ...noJsExtensionOnRelativeImportsRules },
     settings: { react: { version: "18.3" } },
   },
 
@@ -94,7 +113,7 @@ export default tseslint.config(
       globals: { ...globals.node }, // RN's runtime globals aren't a standard `globals` set; Node covers process.env usage, which is all this code reads
     },
     plugins: { "@typescript-eslint": tseslint.plugin, react: reactPlugin, "react-hooks": reactHooksPlugin },
-    rules: { ...baseTsRules, ...reactRules },
+    rules: { ...baseTsRules, ...reactRules, ...noJsExtensionOnRelativeImportsRules },
     settings: { react: { version: "18.3" } },
   },
 

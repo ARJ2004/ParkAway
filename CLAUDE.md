@@ -77,11 +77,12 @@ One `eslint.config.js` covers `apps/*` and `packages/*` with per-surface rule bl
 
 ## The `.js`-import-extension trap
 
-This is the single most common way to break the frontend build in this repo, and it has already happened twice in this codebase's history — read this before adding an import statement anywhere outside `apps/api`.
+This is the single most common way to break the frontend build in this repo — it has happened four separate times in this codebase's history (twice building the mobile app's navigation redesign alone) despite being documented here the whole time. Read this before adding an import statement anywhere outside `apps/api`.
 
 - **`apps/api`** uses `"moduleResolution": "NodeNext"` and runs under Node's own ESM loader (via `tsx`), which **requires** explicit `.js` extensions on relative imports (`from "../lib/errors.js"`) even though the source file is `errors.ts`. This is correct and necessary there.
 - **Everywhere else** (`packages/design-tokens`, `packages/ui-web`, `packages/ui-native`, `apps/driver-web`, `apps/admin-web`, `apps/driver-mobile`) is bundled by Vite or Metro, neither of which resolves a `.js`-suffixed import to a `.ts` source file. TypeScript's checker doesn't catch this (it happily accepts the `.js` suffix under `"moduleResolution": "bundler"`), so the mistake only surfaces at bundle/runtime, not at typecheck time — Metro in particular fails with an opaque "Unable to resolve module" error deep in the import graph.
 - **Rule of thumb: `.js` extensions only in `apps/api`. Extensionless relative imports everywhere else.** If you copy a pattern from the backend into a frontend file (or vice versa), check this before moving on.
+- **`npm run lint` now catches this automatically** — `eslint.config.js` has a `no-restricted-syntax` rule scoped to every non-backend surface that flags a relative import/export ending in `.js`. Documentation alone didn't stop this mistake from recurring; the lint rule is what actually will. If you're editing `eslint.config.js`, `noJsExtensionOnRelativeImportsRules` is where it lives.
 
 ## Architecture notes worth knowing before touching auth/session code
 

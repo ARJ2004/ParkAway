@@ -8,3 +8,4 @@ export * from "./components/EmptyState";
 export * from "./components/WizardProgress";
 export * from "./components/InlineBanner";
 export * from "./components/Card";
+export * from "./components/Badge";

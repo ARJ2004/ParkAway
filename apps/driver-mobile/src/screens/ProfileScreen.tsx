@@ -1,31 +1,49 @@
-import { Button, Card, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text } from "react-native";
+import { Badge, Button, Card, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppHeader } from "../components/AppHeader";
+import { logout as apiLogout } from "../api/auth";
 import { ApiError } from "../api/client";
 import { getProfile, updateProfile, type Profile } from "../api/profile";
-import type { AppStackParamList } from "../navigation/RootNavigator";
+import { useAuth } from "../navigation/AuthContext";
+import type { MainTabParamList } from "../navigation/MainTabs";
+import { clearSession, getRefreshToken } from "../session";
 
-type Props = NativeStackScreenProps<AppStackParamList, "Profile">;
+type Props = BottomTabScreenProps<MainTabParamList, "Profile">;
 
-export function ProfileScreen({ navigation }: Props) {
+function initialsOf(name: string | null): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
+}
+
+/**
+ * Avatar + name/phone header, grouped editable fields, sign-out as its own
+ * clearly separated destructive row at the bottom — not a button buried in
+ * a nav bar. Draws on the Affirm/Freenow/PayPal reference pattern (header
+ * card, grouped settings, log-out last), restyled in ParkAway's palette.
+ */
+// `navigation`/`route` are unused — sign-out is handled via AuthContext's
+// `logout()`, which flips RootNavigator back to the auth stack, not a
+// direct navigation call.
+export function ProfileScreen(_props: Props) {
   const theme = useTheme();
+  const c = theme.colors;
+  const { logout } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
-  // Undefined = "not yet edited this session" -> falls back to the fetched
-  // profile below once it arrives. Avoids copying the fetch result into
-  // state via an effect (react-hooks/set-state-in-effect) — see the same
-  // pattern in driver-web's ProfileScreen.
   const [name, setName] = useState<string | undefined>(undefined);
   const [email, setEmail] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    getProfile().then(setProfile);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      getProfile().then(setProfile);
+    }, [])
+  );
 
   const nameValue = name ?? profile?.name ?? "";
   const emailValue = email ?? profile?.email ?? "";
@@ -45,24 +63,43 @@ export function ProfileScreen({ navigation }: Props) {
     }
   }
 
+  async function handleLogout() {
+    const refreshToken = await getRefreshToken();
+    await clearSession();
+    logout();
+    if (refreshToken) {
+      apiLogout(refreshToken).catch(() => {});
+    }
+  }
+
   if (!profile) return null;
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-      <AppHeader navigation={navigation} />
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.heading, { color: theme.colors.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
-          Profile
+        <View style={styles.header}>
+          <View style={[styles.avatar, { backgroundColor: c.accentSoft }]}>
+            <Text style={[styles.avatarText, { color: c.accent, fontFamily: theme.fonts.headingBold }]}>
+              {initialsOf(profile.name)}
+            </Text>
+          </View>
+          <View>
+            <Text style={[styles.name, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
+              {profile.name || "Add your name"}
+            </Text>
+            <View style={styles.phoneRow}>
+              <Text style={[styles.phone, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>{profile.phone}</Text>
+              <Badge label="Verified" variant="success" />
+            </View>
+          </View>
+        </View>
+
+        <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
+          Personal details
         </Text>
         <Card style={styles.card}>
           {error && <InlineBanner variant="danger">{error}</InlineBanner>}
           {saved && <InlineBanner variant="success">Saved.</InlineBanner>}
-          {/*
-            Phone is read-only with no edit affordance at all — it's the
-            verified identity anchor, matching the backend's hard rejection
-            of phone-field updates.
-          */}
-          <TextField label="Mobile number" value={profile.phone} editable={false} badge="Verified" />
           <TextField label="Name" value={nameValue} onChangeText={setName} placeholder="Your name" />
           <TextField
             label="Email"
@@ -76,6 +113,12 @@ export function ProfileScreen({ navigation }: Props) {
             Save changes
           </Button>
         </Card>
+
+        <Card style={[styles.signOutCard, { borderColor: c.dangerSoft }]}>
+          <Button variant="danger" fullWidth onPress={handleLogout}>
+            Sign out
+          </Button>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -84,6 +127,13 @@ export function ProfileScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { padding: 24, gap: 20 },
-  heading: { fontSize: 22 },
+  header: { flexDirection: "row", alignItems: "center", gap: 16 },
+  avatar: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 20 },
+  name: { fontSize: 19 },
+  phoneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
+  phone: { fontSize: 14 },
+  sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
   card: { gap: 16 },
+  signOutCard: { borderWidth: 1, backgroundColor: "transparent", padding: 4 },
 });

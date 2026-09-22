@@ -1,42 +1,121 @@
-import { Card, useTheme } from "@parkaway/ui-native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { useEffect, useState } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Badge, Card, useTheme } from "@parkaway/ui-native";
+import { Ionicons } from "@expo/vector-icons";
+import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback, useState } from "react";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AppHeader } from "../components/AppHeader";
 import { getProfile, type Profile } from "../api/profile";
-import type { AppStackParamList } from "../navigation/RootNavigator";
+import { listVehicles, type Vehicle } from "../api/vehicles";
+import type { MainTabParamList } from "../navigation/MainTabs";
 
-type Props = NativeStackScreenProps<AppStackParamList, "Home">;
+type Props = BottomTabScreenProps<MainTabParamList, "Home">;
 
+/**
+ * A real dashboard, not a placeholder block — greeting, a status card for
+ * the driver's default vehicle (or a CTA to add one), and the "search is
+ * coming" message framed as a highlight card rather than apologetic filler
+ * text. Pattern draws on Shell/Waymo's "one clear highlight card" home
+ * layout and BMW's status-card treatment, restyled in ParkAway's own warm
+ * palette — see Mobbin references consulted for this redesign.
+ */
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
+  const c = theme.colors;
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [defaultVehicle, setDefaultVehicle] = useState<Vehicle | null>(null);
+  const [hasAnyVehicle, setHasAnyVehicle] = useState(false);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     getProfile().then(setProfile).catch(() => {});
+    listVehicles().then((res) => {
+      const active = res.vehicles.filter((v) => v.status === "active");
+      setHasAnyVehicle(active.length > 0);
+      setDefaultVehicle(active.find((v) => v.isDefault) ?? null);
+    });
   }, []);
 
+  useFocusEffect(load);
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
-      <AppHeader navigation={navigation} />
-      <View style={styles.content}>
-        <Text style={[styles.heading, { color: theme.colors.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
-          {profile?.name ? `Welcome back, ${profile.name}` : "Welcome back"}
-        </Text>
-        <Card>
-          <Text style={{ color: theme.colors.textSecondary, fontFamily: theme.fonts.body, lineHeight: 22 }}>
-            Search and booking are on the way (Sprint 3) — this is where destination-aware search will live. For
-            now, your account is ready: manage your profile and vehicles from the nav above.
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View>
+          <Text style={[styles.greeting, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
+            {profile?.name ? `Hi ${profile.name.split(" ")[0]}` : "Hi there"}
+          </Text>
+          <Text style={[styles.heading, { color: c.textPrimary, fontFamily: theme.fonts.headingBold }]}>
+            Guaranteed parking, on the way
+          </Text>
+        </View>
+
+        <Card style={[styles.highlightCard, { backgroundColor: c.accentSoft, borderColor: "transparent" }]}>
+          <Ionicons name="search-outline" size={22} color={c.accent} />
+          <Text style={[styles.highlightTitle, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
+            Search &amp; booking are coming
+          </Text>
+          <Text style={[styles.highlightBody, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
+            Destination-aware search lands soon. Your account is ready — add a vehicle now so booking is one tap
+            when it arrives.
           </Text>
         </Card>
-      </View>
+
+        <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
+          Your vehicle
+        </Text>
+
+        {defaultVehicle ? (
+          <Pressable onPress={() => navigation.navigate("Vehicles")}>
+            <Card style={styles.vehicleCard}>
+              <View style={[styles.vehicleIconWrap, { backgroundColor: c.accentSoft }]}>
+                <Ionicons name="car-sport" size={22} color={c.accent} />
+              </View>
+              <View style={styles.vehicleInfo}>
+                <Text style={[styles.vehiclePlate, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
+                  {defaultVehicle.registrationNo}
+                </Text>
+                <Text style={[styles.vehicleMeta, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
+                  {defaultVehicle.type}
+                  {defaultVehicle.makeModel ? ` · ${defaultVehicle.makeModel}` : ""}
+                </Text>
+              </View>
+              <Badge label="Default" variant="success" />
+            </Card>
+          </Pressable>
+        ) : (
+          <Pressable onPress={() => navigation.navigate("Vehicles")}>
+            <Card style={styles.emptyVehicleCard}>
+              <Ionicons name="add-circle-outline" size={22} color={c.accent} />
+              <View style={styles.vehicleInfo}>
+                <Text style={[styles.vehiclePlate, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
+                  {hasAnyVehicle ? "No default vehicle set" : "Add your first vehicle"}
+                </Text>
+                <Text style={[styles.vehicleMeta, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
+                  {hasAnyVehicle ? "Pick one from the Vehicles tab" : "Book faster once search is live"}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={c.textMuted} />
+            </Card>
+          </Pressable>
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { flex: 1, padding: 24, gap: 20 },
-  heading: { fontSize: 22 },
+  content: { padding: 24, gap: 20 },
+  greeting: { fontSize: 14 },
+  heading: { fontSize: 26, marginTop: 2 },
+  highlightCard: { gap: 8, borderWidth: 1 },
+  highlightTitle: { fontSize: 17 },
+  highlightBody: { fontSize: 14, lineHeight: 20 },
+  sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
+  vehicleCard: { flexDirection: "row", alignItems: "center", gap: 14 },
+  emptyVehicleCard: { flexDirection: "row", alignItems: "center", gap: 14 },
+  vehicleIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  vehicleInfo: { flex: 1, gap: 2 },
+  vehiclePlate: { fontSize: 16, letterSpacing: 0.3 },
+  vehicleMeta: { fontSize: 13 },
 });
