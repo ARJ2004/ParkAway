@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db/client.js";
-import { rotateRefreshToken } from "../auth/session.service.js";
+import { revokeRefreshToken, rotateRefreshToken } from "../auth/session.service.js";
 import { adminLogin } from "./service.js";
 
 export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<void> {
@@ -50,6 +50,28 @@ export async function registerAdminAuthRoutes(app: FastifyInstance): Promise<voi
         refreshToken: result.refreshToken,
         expiresIn: result.accessTokenExpiresIn,
       });
+    }
+  );
+
+  // Audit-review gap fix: admin-web was calling no backend endpoint at all on
+  // logout (only clearing local storage) — a stolen/leaked admin refresh
+  // token stayed valid server-side indefinitely. This mirrors the driver
+  // logout endpoint's contract exactly.
+  app.post(
+    "/v1/admin/auth/logout",
+    {
+      schema: {
+        body: {
+          type: "object",
+          required: ["refreshToken"],
+          properties: { refreshToken: { type: "string", minLength: 10 } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { refreshToken } = request.body as { refreshToken: string };
+      await revokeRefreshToken(db, refreshToken, request.ip);
+      return reply.code(204).send();
     }
   );
 }

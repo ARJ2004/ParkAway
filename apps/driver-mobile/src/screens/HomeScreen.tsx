@@ -7,6 +7,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getProfile, type Profile } from "../api/profile";
 import { listVehicles, type Vehicle } from "../api/vehicles";
+import { getLocationPermissionState, requestLocationPermission, type LocationPermissionState } from "../location";
 import type { MainTabParamList } from "../navigation/MainTabs";
 
 type Props = BottomTabScreenProps<MainTabParamList, "Home">;
@@ -25,6 +26,8 @@ export function HomeScreen({ navigation }: Props) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [defaultVehicle, setDefaultVehicle] = useState<Vehicle | null>(null);
   const [hasAnyVehicle, setHasAnyVehicle] = useState(false);
+  const [locationState, setLocationState] = useState<LocationPermissionState | null>(null);
+  const [requestingLocation, setRequestingLocation] = useState(false);
 
   const load = useCallback(() => {
     getProfile().then(setProfile).catch(() => {});
@@ -33,9 +36,22 @@ export function HomeScreen({ navigation }: Props) {
       setHasAnyVehicle(active.length > 0);
       setDefaultVehicle(active.find((v) => v.isDefault) ?? null);
     });
+    // Re-check on every focus, not just once — the OS permission can change
+    // in system settings independent of anything this screen does.
+    getLocationPermissionState().then(setLocationState);
   }, []);
 
   useFocusEffect(load);
+
+  async function handleEnableLocation() {
+    setRequestingLocation(true);
+    try {
+      const result = await requestLocationPermission();
+      setLocationState(result);
+    } finally {
+      setRequestingLocation(false);
+    }
+  }
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
@@ -59,6 +75,25 @@ export function HomeScreen({ navigation }: Props) {
             when it arrives.
           </Text>
         </Card>
+
+        {locationState === "undetermined" && (
+          <Card style={styles.locationCard}>
+            <Ionicons name="location-outline" size={20} color={c.textSecondary} />
+            <View style={styles.vehicleInfo}>
+              <Text style={[styles.locationTitle, { color: c.textPrimary, fontFamily: theme.fonts.bodySemibold }]}>
+                Allow location?
+              </Text>
+              <Text style={[styles.locationBody, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
+                Shows parking near you once search is live — search still works without it.
+              </Text>
+            </View>
+            <Pressable onPress={handleEnableLocation} disabled={requestingLocation}>
+              <Text style={[styles.locationAction, { color: c.accent, fontFamily: theme.fonts.bodySemibold }]}>
+                {requestingLocation ? "…" : "Enable"}
+              </Text>
+            </Pressable>
+          </Card>
+        )}
 
         <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
           Your vehicle
@@ -118,4 +153,8 @@ const styles = StyleSheet.create({
   vehicleInfo: { flex: 1, gap: 2 },
   vehiclePlate: { fontSize: 16, letterSpacing: 0.3 },
   vehicleMeta: { fontSize: 13 },
+  locationCard: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 16 },
+  locationTitle: { fontSize: 14 },
+  locationBody: { fontSize: 12, lineHeight: 16 },
+  locationAction: { fontSize: 13 },
 });

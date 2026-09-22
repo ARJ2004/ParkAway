@@ -1,7 +1,7 @@
 # ParkAway — Progress
 
 **Last updated:** 2026-09-23
-**Status:** Sprint 1 (identity, profiles, admin foundation) built end-to-end across backend, both web apps, and the mobile app. Not yet device-tested on mobile; several product decisions still open (listed below).
+**Status:** Sprint 1 (identity, profiles, admin foundation) built end-to-end across backend, both web apps, and the mobile app, and audited against the original acceptance criteria — the four gaps that audit found are fixed and tested (see "Audit against Sprint 1 plan" below). Not yet device-tested on mobile; several product decisions still open (listed below).
 
 This is a standing status summary — update it at the end of each sprint, not a historical log of every change. For day-to-day decision history, see `docs/planning/04-sprint-1-detailed-plan.md`'s "Implementation status" entries and the git log. For repo conventions and setup, see `CLAUDE.md` and `README.md`.
 
@@ -14,9 +14,9 @@ This is a standing status summary — update it at the end of each sprint, not a
 Fastify + Drizzle/PostgreSQL+PostGIS + Redis, covering `AUTH-01`–`04`, `ADM-01`/`02` (= `AUTH-03`), `DRV-02`–`04`:
 
 - **OTP login** — request/verify, single-use atomic consumption, rate limiting (fail-closed on Redis outage), mock SMS provider with a production-boot guard that refuses to start if the bypass is left enabled outside dev
-- **Sessions** — stateless JWT access tokens + opaque refresh tokens with rotation and reuse detection (atomic claim, not a check-then-act race)
+- **Sessions** — stateless JWT access tokens + opaque refresh tokens with rotation and reuse detection (atomic claim, not a check-then-act race); logout (driver and admin) revokes the token and writes an `auth.logout` audit row, not just a client-side clear
 - **Suspension enforcement** — `session_version` + short-TTL Redis cache, fails safe (re-checks Postgres) on a cache miss rather than assuming still-valid
-- **Admin auth + RBAC** — email/password login, two roles (`platform_admin` full access, `support` sees masked PII), generic invalid-credentials error that never reveals whether an email exists
+- **Admin auth + RBAC** — email/password login, two roles (`platform_admin` full access, `support` sees masked PII), generic invalid-credentials error that never reveals whether an email exists; every admin user-management route now enforces role via `requireAdminRole`, not just authentication
 - **Driver profile & vehicles** — CRUD, phone immutable (rejected explicitly, not silently ignored), vehicle registration numbers validated against the standard Indian format (`KA05HR1096`-style) and **globally unique while active** — one live account per plate system-wide, not per-user
 - **Admin user management** — search (phone/ID/vehicle/email) with role-based PII masking, suspend/restore with a required reason, every action audited
 - **Shared infrastructure** — `audit_log` (actor/timestamp/source/reason on every status change), provider-adapter pattern for the OTP/SMS integration, S3-ready photo upload path (presigned URLs, not proxied)
@@ -27,7 +27,9 @@ Fastify + Drizzle/PostgreSQL+PostGIS + Redis, covering `AUTH-01`–`04`, `ADM-01
 
 A third bug (`pgConstraintName()` never actually reaching the wrapped Postgres error's message, silently disabling constraint-specific recovery logic in two places) was caught while writing the vehicle-uniqueness test and fixed the same way — by writing a precise assertion instead of a loose one.
 
-**Tests:** 32 (20 unit + 5 Testcontainers concurrency tests against real Postgres/Redis, covering the two races above, duplicate-account handling, and the vehicle-uniqueness behavior end-to-end).
+A follow-up audit against the original Sprint 1 acceptance criteria (see "Audit against Sprint 1 plan" below) found four more gaps between documented "done" and actual behavior; all four are now fixed and covered by real tests, not just manual/curl verification.
+
+**Tests:** 38 (30 unit + 8 Testcontainers concurrency/audit-trail tests against real Postgres/Redis) — up from 32, covering the two races above, duplicate-account handling, vehicle-uniqueness behavior end-to-end, `requireAdminRole`'s allow/deny/wiring-bug paths, and logout actually writing an audit row for both driver and admin sessions (plus the silent-no-op case for an unknown/already-revoked token).
 
 ### Shared design system (`packages/design-tokens`, `packages/ui-web`, `packages/ui-native`)
 
@@ -50,8 +52,11 @@ Same feature set as Driver Web, native from the start rather than a ported layou
 - **Vehicles** — card-based garage list with a themed icon tile and a `Default` badge
 - **Profile** — avatar-initials header, grouped editable fields, sign-out as its own separated destructive row
 - **Session storage** via `expo-secure-store` (encrypted — a deliberate upgrade over the web apps' localStorage, not an inconsistency)
+- **Location permission (`DRV-04`)** — soft-ask card on Home, shown only while permission is undetermined, explaining the value before prompting (never at first launch); `getCurrentPositionSafe()` treats low-accuracy (>100m) or stale (>2min) fixes as unreliable rather than trusting them blindly. Deliberately the only thing DRV-04 delivers this sprint — nothing else depends on a position existing; search-by-typed-destination stays fully usable with permission denied.
 
-**Verification gap, stated plainly:** no browser or device/emulator was available in the session that built this, so it's confirmed via clean typecheck and a full Metro production bundle (897 modules, no resolution errors) — structurally sound, but never actually seen running or tapped through on a phone. First real device test is still outstanding.
+**Tests:** 10 (Vitest, newly set up for this app — it had no test infrastructure before). Mocks `expo-location` to cover permission-state mapping, the request-permission flow, and `getCurrentPositionSafe`'s reliability logic (fresh/accurate, low-accuracy, stale, missing-accuracy, and device-failure cases) without needing a device.
+
+**Verification gap, stated plainly:** no browser or device/emulator was available in the session that built this, so beyond the unit tests above it's confirmed via clean typecheck and a full Metro production bundle (897 modules, no resolution errors) — structurally sound, but the UI itself has never actually been seen running or tapped through on a phone. First real device test is still outstanding.
 
 ### Tooling
 
@@ -61,12 +66,23 @@ Same feature set as Driver Web, native from the start rather than a ported layou
 
 ---
 
+## Audit against Sprint 1 plan (2026-09-23)
+
+Re-read the original acceptance criteria in `docs/planning/04-sprint-1-detailed-plan.md` fresh and grepped the actual code against it, rather than trusting the prior "done" status. Found four real gaps — documented as complete but not actually implemented, or implemented but untested:
+
+1. **`DRV-04` (location permission) didn't exist at all.** No code anywhere. Built this session (see Driver Mobile section above), including tests.
+2. **Logout never wrote an audit record**, violating the stated "every status-changing action is audited" rule. Fixed: `revokeRefreshToken` now looks up the token before revoking and records an `auth.logout` row when it was live; covered by three Testcontainers tests (driver, admin, and the silent-no-op case).
+3. **Admin RBAC had no per-role enforcement** — a comment in the code referenced a `requireAdminRole` function that was never implemented, so both admin roles could hit every admin route identically regardless of what the plan specified. Built and wired into all three `apps/admin` routes; covered by three unit tests (`test/authenticate.test.ts`) for the allow/deny/wiring-bug-not-silently-allowed paths.
+4. **admin-web's logout only cleared local storage** — there was no backend endpoint to call. Added `POST /v1/admin/auth/logout`; admin-web now calls it (best-effort, doesn't block navigation on failure).
+
+All four were fixed with real code changes, not documentation edits, and all four now have automated test coverage — closing a gap explicitly flagged mid-session ("was test written to test these things") where the first pass had only manual/curl verification for three of the four.
+
 ## Still open — real product decisions, not implementation gaps
 
-1. **Can the `support` admin role suspend/restore users, or should it be read-only-plus-masked?** Currently shipped as "can suspend" by default. Reversible (a permission check, not a schema change), but was never explicitly confirmed.
+1. **Can the `support` admin role suspend/restore users, or should it be read-only-plus-masked?** Currently shipped as "can suspend" by default (both roles passed to `requireAdminRole`). Reversible (a one-line permission-list change, not a schema change), but was never explicitly confirmed.
 2. **Phone-number recycling / dormant-account-takeover risk.** Explicitly deferred by request ("leave this for now") — not resolved, not forgotten. Tied to `GATE-11` when it's picked back up.
 3. **The Sprint 0 Engineering Gate is still not formally checked off** anywhere in this repo (`docs/planning/02-kanban-board.md`), despite `GATE-10` (admin overrides) and `GATE-11` (PII/KYC retention) being directly relevant to code that's now live with real PII in it.
-4. **Mobile has never been run on an actual device or emulator.** Structurally verified only. First priority next time someone has a phone or emulator handy.
+4. **Mobile has never been run on an actual device or emulator.** Structurally and now unit-test verified, but the UI itself is unseen on a real device. First priority next time someone has a phone or emulator handy.
 
 ## Known pragmatic deviations (documented where they live, listed here for visibility)
 

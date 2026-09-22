@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { adminLogout } from "../api/auth";
 import { restoreUser, searchUsers, type AdminUserSearchResult } from "../api/users";
-import { clearSession, getRole } from "../session";
+import { clearSession, getRefreshToken, getRole } from "../session";
 import { suspendUser } from "../api/users";
 import styles from "./UserSearchScreen.module.css";
 
@@ -55,7 +56,15 @@ export function UserSearchScreen() {
   }
 
   function handleLogout() {
+    // Revoke server-side first so a leaked refresh token can't outlive this
+    // session — clearing local storage alone (the previous behavior) never
+    // actually invalidated it. Best-effort: the local session clears either
+    // way, since the user's intent to log out shouldn't hang on network state.
+    const refreshToken = getRefreshToken();
     clearSession();
+    if (refreshToken) {
+      adminLogout(refreshToken).catch(() => {});
+    }
     navigate("/", { replace: true });
   }
 

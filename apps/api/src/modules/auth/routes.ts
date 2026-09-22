@@ -93,7 +93,7 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request, reply) => {
       const { refreshToken } = request.body as { refreshToken: string };
-      await revokeRefreshToken(db, refreshToken);
+      await revokeRefreshToken(db, refreshToken, request.ip);
       return reply.code(204).send();
     }
   );

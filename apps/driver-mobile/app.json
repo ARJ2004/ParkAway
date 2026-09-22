@@ -23,7 +23,13 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "ParkAway uses your location to show nearby parking and estimate distance to a space. Search still works without it — you can always enter a destination manually."
+        }
+      ]
     ]
   }
 }

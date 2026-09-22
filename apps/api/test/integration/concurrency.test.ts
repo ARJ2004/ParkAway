@@ -24,13 +24,18 @@ let verifyOtp: typeof import("../../src/modules/auth/otp.service.js").verifyOtp;
 let requestOtp: typeof import("../../src/modules/auth/otp.service.js").requestOtp;
 let rotateRefreshToken: typeof import("../../src/modules/auth/session.service.js").rotateRefreshToken;
 let issueSession: typeof import("../../src/modules/auth/session.service.js").issueSession;
+let revokeRefreshToken: typeof import("../../src/modules/auth/session.service.js").revokeRefreshToken;
 let addVehicle: typeof import("../../src/modules/identity/vehicle.service.js").addVehicle;
 let updateVehicle: typeof import("../../src/modules/identity/vehicle.service.js").updateVehicle;
 let ConflictError: typeof import("../../src/lib/errors.js").ConflictError;
 let users: typeof import("../../src/db/schema.js").users;
 let vehicles: typeof import("../../src/db/schema.js").vehicles;
 let refreshTokens: typeof import("../../src/db/schema.js").refreshTokens;
+let auditLog: typeof import("../../src/db/schema.js").auditLog;
+let adminUsers: typeof import("../../src/db/schema.js").adminUsers;
 let eqFn: typeof import("drizzle-orm").eq;
+let andFn: typeof import("drizzle-orm").and;
+let descFn: typeof import("drizzle-orm").desc;
 
 const REDIS_PASSWORD = "testpass";
 const mockOtpProvider = { send: async () => {} };
@@ -71,6 +76,7 @@ beforeAll(async () => {
   const sessionMod = await import("../../src/modules/auth/session.service.js");
   rotateRefreshToken = sessionMod.rotateRefreshToken;
   issueSession = sessionMod.issueSession;
+  revokeRefreshToken = sessionMod.revokeRefreshToken;
 
   const vehicleMod = await import("../../src/modules/identity/vehicle.service.js");
   addVehicle = vehicleMod.addVehicle;
@@ -83,9 +89,13 @@ beforeAll(async () => {
   users = schemaMod.users;
   vehicles = schemaMod.vehicles;
   refreshTokens = schemaMod.refreshTokens;
+  auditLog = schemaMod.auditLog;
+  adminUsers = schemaMod.adminUsers;
 
   const drizzleOrm = await import("drizzle-orm");
   eqFn = drizzleOrm.eq;
+  andFn = drizzleOrm.and;
+  descFn = drizzleOrm.desc;
 
   const { migrate } = await import("drizzle-orm/postgres-js/migrator");
   await migrate(db, { migrationsFolder: path.resolve(import.meta.dirname, "../../drizzle") });
@@ -102,6 +112,15 @@ async function createTestUser(phone: string) {
   const [u] = await db.insert(users).values({ phone }).returning();
   if (!u) throw new Error("failed to create test user");
   return u;
+}
+
+async function createTestAdmin(email: string) {
+  const [a] = await db
+    .insert(adminUsers)
+    .values({ email, passwordHash: "not-a-real-hash", role: "platform_admin" })
+    .returning();
+  if (!a) throw new Error("failed to create test admin");
+  return a;
 }
 
 describe("OTP verify concurrency", () => {
@@ -206,5 +225,65 @@ describe("Vehicle registration uniqueness (global, not per-user)", () => {
     const reregistered = await addVehicle(db, buyer.id, { registrationNo: "KA05HR2000", type: "suv" });
     expect(reregistered.registrationNo).toBe("KA05HR2000");
     expect(reregistered.userId).toBe(buyer.id);
+  });
+});
+
+describe("Logout audit trail", () => {
+  it("driver logout writes an auth.logout audit row for that driver", async () => {
+    const user = await createTestUser("+919800000008");
+    const session = await issueSession(db, "driver", user.id, 0);
+
+    await revokeRefreshToken(db, session.refreshToken, "203.0.113.1");
+
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(andFn(eqFn(auditLog.action, "auth.logout"), eqFn(auditLog.actorId, user.id)))
+      .orderBy(descFn(auditLog.createdAt));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorType: "driver",
+      targetType: "user",
+      targetId: user.id,
+      source: "203.0.113.1",
+    });
+  });
+
+  it("admin logout writes an auth.logout audit row for that admin", async () => {
+    const admin = await createTestAdmin("audit-test-admin@parkaway.test");
+    const session = await issueSession(db, "admin", admin.id, 0, { role: "platform_admin" });
+
+    await revokeRefreshToken(db, session.refreshToken, "203.0.113.2");
+
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(andFn(eqFn(auditLog.action, "auth.logout"), eqFn(auditLog.actorId, admin.id)))
+      .orderBy(descFn(auditLog.createdAt));
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      actorType: "admin",
+      targetType: "admin_user",
+      targetId: admin.id,
+      source: "203.0.113.2",
+    });
+  });
+
+  it("revoking an unknown or already-revoked token is a silent no-op — no audit row, no throw", async () => {
+    const before = await db.select().from(auditLog).where(eqFn(auditLog.action, "auth.logout"));
+
+    await expect(revokeRefreshToken(db, "not-a-real-token", "203.0.113.3")).resolves.toBeUndefined();
+
+    const user = await createTestUser("+919800000009");
+    const session = await issueSession(db, "driver", user.id, 0);
+    await revokeRefreshToken(db, session.refreshToken, "203.0.113.4"); // first revoke: real
+    await expect(revokeRefreshToken(db, session.refreshToken, "203.0.113.5")).resolves.toBeUndefined(); // second: no-op
+
+    const afterUnknown = await db.select().from(auditLog).where(eqFn(auditLog.action, "auth.logout"));
+    // Exactly one new row from the real first revoke of `user`; the unknown-token
+    // attempt and the double-revoke of the same token must not have added rows.
+    expect(afterUnknown.length).toBe(before.length + 1);
   });
 });

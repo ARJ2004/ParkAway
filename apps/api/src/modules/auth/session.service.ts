@@ -171,13 +171,34 @@ export async function rotateRefreshToken(
   return { accessToken, refreshToken: newRawToken, accessTokenExpiresIn: env.JWT_ACCESS_TTL_SECONDS };
 }
 
-/** Revokes only the presented token — other device sessions are unaffected (multi-device is allowed). */
-export async function revokeRefreshToken(db: Db, rawRefreshToken: string): Promise<void> {
+/**
+ * Revokes only the presented token — other device sessions are unaffected
+ * (multi-device is allowed). Idempotent and silent on an unknown/already-
+ * revoked token (logout always "succeeds" from the client's point of view).
+ *
+ * Audits the logout when the token was actually found and live — matching
+ * AUTH-01 AC9 ("every OTP request, verification attempt, login, AND LOGOUT
+ * is recorded"), which this had silently missed until an audit against the
+ * original acceptance criteria caught it.
+ */
+export async function revokeRefreshToken(db: Db, rawRefreshToken: string, source: string | null): Promise<void> {
   const tokenHash = sha256Hex(rawRefreshToken);
-  await db
+  const [revoked] = await db
     .update(refreshTokens)
     .set({ revokedAt: new Date() })
-    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)));
+    .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)))
+    .returning();
+
+  if (revoked) {
+    await recordAudit(db, {
+      actorType: revoked.userType as "driver" | "admin",
+      actorId: revoked.userId,
+      action: "auth.logout",
+      targetType: revoked.userType === "admin" ? "admin_user" : "user",
+      targetId: revoked.userId,
+      source,
+    });
+  }
 }
 
 async function fetchCurrentAccountState(
