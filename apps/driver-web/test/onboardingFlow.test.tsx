@@ -52,7 +52,7 @@ describe("Driver onboarding flow", () => {
     );
   });
 
-  it("a new user completing OTP verification lands on the skippable onboarding wizard, not straight to home", async () => {
+  it("a new user completing OTP verification sees the persona picker first, then the skippable onboarding wizard after picking driver", async () => {
     const user = userEvent.setup();
     vi.mocked(fetch)
       .mockResolvedValueOnce(mockJsonResponse({ status: "sent" }))
@@ -64,7 +64,11 @@ describe("Driver onboarding flow", () => {
           isNewUser: true,
           userId: "user-1",
         })
-      );
+      )
+      // GET /v1/me/personas — null lastPersona is what triggers the picker (AC-1, AC-3).
+      .mockResolvedValueOnce(mockJsonResponse({ available: ["driver", "owner"], granted: ["driver"], lastPersona: null }))
+      // POST /v1/me/personas/select — picking "driver".
+      .mockResolvedValueOnce(mockJsonResponse({ available: ["driver", "owner"], granted: ["driver"], lastPersona: "driver" }));
 
     renderApp(["/"]);
     await user.type(screen.getByLabelText(/mobile number/i), "9876543210");
@@ -77,12 +81,15 @@ describe("Driver onboarding flow", () => {
     }
     await user.click(screen.getByRole("button", { name: /verify/i }));
 
+    expect(await screen.findByText(/park a vehicle/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /park a vehicle/i }));
+
     expect(await screen.findByText(/tell us about you/i)).toBeInTheDocument();
     // Both the profile and vehicle steps must offer an equally first-class Skip.
     expect(screen.getByRole("button", { name: /skip/i })).toBeInTheDocument();
   });
 
-  it("an existing user (isNewUser: false) skips the wizard entirely and lands on home", async () => {
+  it("a returning user who already picked 'driver' skips both the persona picker and the wizard, landing on home", async () => {
     const user = userEvent.setup();
     vi.mocked(fetch)
       .mockResolvedValueOnce(mockJsonResponse({ status: "sent" }))
@@ -95,6 +102,8 @@ describe("Driver onboarding flow", () => {
           userId: "user-1",
         })
       )
+      // GET /v1/me/personas — a non-null lastPersona is what tells the client to skip the picker entirely (AC-3).
+      .mockResolvedValueOnce(mockJsonResponse({ available: ["driver", "owner"], granted: ["driver"], lastPersona: "driver" }))
       .mockResolvedValueOnce(
         mockJsonResponse({
           id: "user-1",

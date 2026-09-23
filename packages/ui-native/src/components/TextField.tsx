@@ -19,8 +19,8 @@ export function TextField({ label, error, hint, badge, style, ...rest }: TextFie
         style={[
           styles.input,
           {
-            borderColor: error ? c.danger : c.borderStrong,
-            backgroundColor: rest.editable === false ? c.background : c.surface,
+            borderColor: error ? c.danger : c.border,
+            backgroundColor: rest.editable === false ? c.background : c.surfaceRaised,
             color: c.textPrimary,
             fontFamily: theme.fonts.body,
           },
@@ -41,7 +41,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 14 },
   input: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 16,
     fontSize: 16,

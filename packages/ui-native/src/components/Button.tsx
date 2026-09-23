@@ -47,7 +47,7 @@ export function Button({ children, variant = "primary", fullWidth, loading, disa
 const styles = StyleSheet.create({
   button: {
     borderWidth: 1,
-    borderRadius: 10,
+    borderRadius: 12,
     paddingVertical: 14,
     paddingHorizontal: 20,
     alignItems: "center",

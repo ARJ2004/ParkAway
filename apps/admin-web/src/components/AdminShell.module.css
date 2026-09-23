@@ -1,0 +1,57 @@
+.shell {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  padding: var(--space-lg) var(--space-2xl);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.brand {
+  font-family: var(--font-heading);
+  font-weight: var(--font-weight-semibold);
+}
+
+.navLink {
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+
+.navLinkActive {
+  color: var(--color-accent);
+}
+
+.roleTag {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-background);
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-pill);
+  text-transform: capitalize;
+}
+
+.logout {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+
+.content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}

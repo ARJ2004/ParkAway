@@ -42,7 +42,12 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { method = "GET", body, auth = true } = options;
 
   async function doFetch(): Promise<Response> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {};
+    // Only send Content-Type: application/json when there's actually a body
+    // — Fastify's default JSON parser throws FST_ERR_CTP_EMPTY_JSON_BODY on
+    // an empty body with that header set, which the backend's error handler
+    // was turning into a generic 500 instead of the real 400.
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     if (auth) {
       const token = getAccessToken();
       if (token) headers.Authorization = `Bearer ${token}`;

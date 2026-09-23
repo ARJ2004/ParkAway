@@ -3,11 +3,13 @@ import { Ionicons } from "@expo/vector-icons";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getProfile, type Profile } from "../api/profile";
 import { listVehicles, type Vehicle } from "../api/vehicles";
 import { getLocationPermissionState, requestLocationPermission, type LocationPermissionState } from "../location";
+import { PersonaSwitchPill } from "../components/PersonaSwitchPill";
+import { useAuth } from "../navigation/AuthContext";
 import type { MainTabParamList } from "../navigation/MainTabs";
 
 type Props = BottomTabScreenProps<MainTabParamList, "Home">;
@@ -23,11 +25,22 @@ type Props = BottomTabScreenProps<MainTabParamList, "Home">;
 export function HomeScreen({ navigation }: Props) {
   const theme = useTheme();
   const c = theme.colors;
+  const { selectPersona } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [defaultVehicle, setDefaultVehicle] = useState<Vehicle | null>(null);
   const [hasAnyVehicle, setHasAnyVehicle] = useState(false);
   const [locationState, setLocationState] = useState<LocationPermissionState | null>(null);
   const [requestingLocation, setRequestingLocation] = useState(false);
+  const [switchingToOwner, setSwitchingToOwner] = useState(false);
+
+  async function handleBecomeOwner() {
+    setSwitchingToOwner(true);
+    try {
+      await selectPersona("owner");
+    } finally {
+      setSwitchingToOwner(false);
+    }
+  }
 
   const load = useCallback(() => {
     getProfile().then(setProfile).catch(() => {});
@@ -56,6 +69,8 @@ export function HomeScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
+        <PersonaSwitchPill active="driver" />
+
         <View>
           <Text style={[styles.greeting, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>
             {profile?.name ? `Hi ${profile.name.split(" ")[0]}` : "Hi there"}
@@ -133,6 +148,19 @@ export function HomeScreen({ navigation }: Props) {
             </Card>
           </Pressable>
         )}
+
+        <Pressable onPress={handleBecomeOwner} disabled={switchingToOwner}>
+          <Card style={[styles.upsellCard, { backgroundColor: c.surfaceRaised, borderColor: c.accentSoft }]}>
+            <View style={[styles.upsellIconWrap, { backgroundColor: c.accentSoft }]}>
+              <Ionicons name="business-outline" size={20} color={c.accentHover} />
+            </View>
+            <View style={styles.vehicleInfo}>
+              <Text style={[styles.upsellTitle, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>Own a spot? Start earning.</Text>
+              <Text style={[styles.vehicleMeta, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>List it in a few minutes — switch to Owner.</Text>
+            </View>
+            {switchingToOwner ? <ActivityIndicator color={c.accent} /> : <Ionicons name="chevron-forward" size={18} color={c.textMuted} />}
+          </Card>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -157,4 +185,7 @@ const styles = StyleSheet.create({
   locationTitle: { fontSize: 14 },
   locationBody: { fontSize: 12, lineHeight: 16 },
   locationAction: { fontSize: 13 },
+  upsellCard: { flexDirection: "row", alignItems: "center", gap: 14, borderWidth: 1 },
+  upsellIconWrap: { width: 44, height: 44, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  upsellTitle: { fontSize: 15 },
 });

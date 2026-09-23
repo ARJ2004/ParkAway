@@ -1,10 +1,35 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../../db/client.js";
 import { requireDriverAuth } from "../../plugins/authenticate.js";
+import { getPersonas, selectPersona } from "./persona.service.js";
 import { getProfile, updateProfile } from "./profile.service.js";
 import { addVehicle, listVehicles, updateVehicle } from "./vehicle.service.js";
 
 export async function registerIdentityRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/v1/me/personas", { preHandler: requireDriverAuth }, async (request, reply) => {
+    const personas = await getPersonas(db, request.driverAuth!.userId);
+    return reply.code(200).send(personas);
+  });
+
+  app.post(
+    "/v1/me/personas/select",
+    {
+      preHandler: requireDriverAuth,
+      schema: {
+        body: {
+          type: "object",
+          required: ["persona"],
+          properties: { persona: { type: "string", enum: ["driver", "owner"] } },
+        },
+      },
+    },
+    async (request, reply) => {
+      const { persona } = request.body as { persona: string };
+      const result = await selectPersona(db, request.driverAuth!.userId, persona, request.ip);
+      return reply.code(200).send(result);
+    }
+  );
+
   app.get("/v1/me/profile", { preHandler: requireDriverAuth }, async (request, reply) => {
     const profile = await getProfile(db, request.driverAuth!.userId);
     return reply.code(200).send(profile);

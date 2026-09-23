@@ -1,18 +1,14 @@
 import { Button, EmptyState, InlineBanner, Modal, StatusBadge, Table, TextField } from "@parkaway/ui-web";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
-import { adminLogout } from "../api/auth";
 import { restoreUser, searchUsers, type AdminUserSearchResult } from "../api/users";
-import { clearSession, getRefreshToken, getRole } from "../session";
 import { suspendUser } from "../api/users";
+import { AdminShell } from "../components/AdminShell";
 import styles from "./UserSearchScreen.module.css";
 
 export function UserSearchScreen() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const role = getRole();
 
   const [query, setQuery] = useState("");
   const [submittedQuery, setSubmittedQuery] = useState("");
@@ -55,19 +51,6 @@ export function UserSearchScreen() {
     setSelected(null);
   }
 
-  function handleLogout() {
-    // Revoke server-side first so a leaked refresh token can't outlive this
-    // session — clearing local storage alone (the previous behavior) never
-    // actually invalidated it. Best-effort: the local session clears either
-    // way, since the user's intent to log out shouldn't hang on network state.
-    const refreshToken = getRefreshToken();
-    clearSession();
-    if (refreshToken) {
-      adminLogout(refreshToken).catch(() => {});
-    }
-    navigate("/", { replace: true });
-  }
-
   function openActionModal() {
     setReason("");
     setActionError(null);
@@ -78,15 +61,7 @@ export function UserSearchScreen() {
   const pendingAction = isSuspendFlow ? suspendMutation : restoreMutation;
 
   return (
-    <div className={styles.shell}>
-      <nav className={styles.nav}>
-        <span className={styles.brand}>ParkAway Admin</span>
-        {role && <span className={styles.roleTag}>{role.replace("_", " ")}</span>}
-        <button className={styles.logout} onClick={handleLogout}>
-          Log out
-        </button>
-      </nav>
-
+    <AdminShell>
       <div className={styles.content}>
         <div className={styles.main}>
           <form className={styles.searchBar} onSubmit={handleSearchSubmit}>
@@ -176,6 +151,6 @@ export function UserSearchScreen() {
           autoFocus
         />
       </Modal>
-    </div>
+    </AdminShell>
   );
 }

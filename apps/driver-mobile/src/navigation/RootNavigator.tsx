@@ -3,11 +3,17 @@ import { useTheme } from "@parkaway/ui-native";
 import { ActivityIndicator, View } from "react-native";
 import { useAuth } from "./AuthContext";
 import { MainTabs } from "./MainTabs";
+import { OwnerTabs } from "./OwnerTabs";
 import { PhoneEntryScreen } from "../screens/PhoneEntryScreen";
 import { OtpEntryScreen } from "../screens/OtpEntryScreen";
+import { PersonaScreen } from "../screens/PersonaScreen";
 import { OnboardingProfileScreen } from "../screens/OnboardingProfileScreen";
 import { OnboardingVehicleScreen } from "../screens/OnboardingVehicleScreen";
 import { VehicleFormScreen } from "../screens/VehicleFormScreen";
+import { PropertyFormScreen } from "../screens/owner/PropertyFormScreen";
+import { ListingWizardScreen } from "../screens/owner/ListingWizardScreen";
+import { HostKycScreen } from "../screens/owner/HostKycScreen";
+import { HostPayoutScreen } from "../screens/owner/HostPayoutScreen";
 
 export type AuthStackParamList = {
   PhoneEntry: undefined;
@@ -20,25 +26,35 @@ export type OnboardingStackParamList = {
 };
 
 /**
- * The logged-in app is a stack with exactly two entries: the tab navigator
- * (MainTabs — Home/Vehicles/Profile, see MainTabs.tsx) and VehicleForm,
- * pushed on top with a native header + back button when reached from any
- * tab. This is what lets `navigation.navigate("VehicleForm")` work from
- * inside a tab screen (React Navigation resolves an unrecognized screen name
- * by walking up to the parent navigator) without VehicleForm itself living
- * inside the tab bar.
+ * The logged-in DRIVER app is a stack with exactly two entries: the tab
+ * navigator (MainTabs — Home/Vehicles/Profile) and VehicleForm, pushed on
+ * top with a native header + back button when reached from any tab.
  */
 export type AppStackParamList = {
   MainTabs: undefined;
   VehicleForm: undefined;
 };
 
+/**
+ * The owner persona is a mode inside this same app (locked decision O-8),
+ * not a separate app — its own stack, wrapping `OwnerTabs` plus the pushed
+ * screens a host reaches from the checklist or the Spaces tab.
+ */
+export type OwnerStackParamList = {
+  OwnerTabs: undefined;
+  PropertyForm: undefined;
+  ListingWizard: { listingId: string; step?: string };
+  HostKyc: undefined;
+  HostPayout: undefined;
+};
+
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const OnboardingStack = createNativeStackNavigator<OnboardingStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
+const OwnerStack = createNativeStackNavigator<OwnerStackParamList>();
 
 export function RootNavigator() {
-  const { isLoggedIn, isNewUserPending, checkingSession } = useAuth();
+  const { isLoggedIn, personaPending, activePersona, isNewUserPending, checkingSession } = useAuth();
   const theme = useTheme();
 
   if (checkingSession) {
@@ -60,6 +76,26 @@ export function RootNavigator() {
         <AuthStack.Screen name="PhoneEntry" component={PhoneEntryScreen} />
         <AuthStack.Screen name="OtpEntry" component={OtpEntryScreen} />
       </AuthStack.Navigator>
+    );
+  }
+
+  // First-login-only picker (AC-1, AC-3) — takes priority over the driver
+  // onboarding wizard, which only starts once a persona has actually been
+  // chosen (§2.2a: persona routing is UI-only, decided before any
+  // persona-specific screen renders).
+  if (personaPending) {
+    return <PersonaScreen />;
+  }
+
+  if (activePersona === "owner") {
+    return (
+      <OwnerStack.Navigator screenOptions={screenOptions}>
+        <OwnerStack.Screen name="OwnerTabs" component={OwnerTabs} />
+        <OwnerStack.Screen name="PropertyForm" component={PropertyFormScreen} options={{ headerShown: true, title: "Add property" }} />
+        <OwnerStack.Screen name="ListingWizard" component={ListingWizardScreen} />
+        <OwnerStack.Screen name="HostKyc" component={HostKycScreen} />
+        <OwnerStack.Screen name="HostPayout" component={HostPayoutScreen} />
+      </OwnerStack.Navigator>
     );
   }
 

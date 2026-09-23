@@ -9,5 +9,5 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 16, padding: 24 },
+  card: { borderWidth: 1, borderRadius: 18, padding: 24 },
 });

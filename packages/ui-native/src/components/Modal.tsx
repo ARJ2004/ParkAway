@@ -38,7 +38,7 @@ const styles = StyleSheet.create({
   dialog: {
     width: "100%",
     maxWidth: 420,
-    borderRadius: 16,
+    borderRadius: 18,
     padding: 24,
     gap: 16,
   },

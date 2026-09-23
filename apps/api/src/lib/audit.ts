@@ -2,7 +2,14 @@ import type { Db } from "../db/client.js";
 import { auditLog } from "../db/schema.js";
 
 export type ActorType = "driver" | "admin" | "system";
-export type TargetType = "user" | "vehicle" | "admin_user";
+export type TargetType =
+  | "user"
+  | "vehicle"
+  | "admin_user"
+  | "property"
+  | "listing"
+  | "host_profile"
+  | "document";
 
 export interface RecordAuditParams {
   actorType: ActorType;
@@ -22,7 +29,16 @@ export interface RecordAuditParams {
  * rule #6) is structurally hard to forget rather than a convention someone has
  * to remember per-route.
  */
-export async function recordAudit(db: Db, params: RecordAuditParams): Promise<void> {
+/**
+ * Deliberately typed as `Pick<Db, "insert">` rather than `Db` — Sprint 2
+ * introduces the first callers that need to write an audit row from inside
+ * a `db.transaction(async (tx) => ...)` block (e.g. persona.service.ts,
+ * authorization revoke's cascade) so the audit row commits or rolls back
+ * atomically with the state change it describes. `Db` itself would reject a
+ * `tx` argument (it's missing `Db`-only members like `$client`), but both
+ * share the same `.insert()` signature, which is all this needs.
+ */
+export async function recordAudit(db: Pick<Db, "insert">, params: RecordAuditParams): Promise<void> {
   await db.insert(auditLog).values({
     actorType: params.actorType,
     actorId: params.actorId ?? null,

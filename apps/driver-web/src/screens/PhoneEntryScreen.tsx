@@ -5,7 +5,14 @@ import { requestOtp } from "../api/auth";
 import { ApiError } from "../api/client";
 import { AuthLayout, authLayoutStyles } from "../components/AuthLayout";
 
-export function PhoneEntryScreen() {
+export interface PhoneEntryScreenProps {
+  /** Set when reached via the Property Manager Console's own login entry — see OtpEntryScreen's routing. */
+  next?: "manage";
+  heading?: string;
+  subheading?: string;
+}
+
+export function PhoneEntryScreen({ next, heading, subheading }: PhoneEntryScreenProps = {}) {
   const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -17,7 +24,7 @@ export function PhoneEntryScreen() {
     setLoading(true);
     try {
       await requestOtp(phone);
-      navigate("/otp", { state: { phone } });
+      navigate("/otp", { state: { phone, next } });
     } catch (err) {
       if (err instanceof ApiError && err.code === "RATE_LIMITED") {
         setError("Too many attempts for this number — please try again in a little while.");
@@ -32,7 +39,7 @@ export function PhoneEntryScreen() {
   }
 
   return (
-    <AuthLayout heading="Find guaranteed parking" subheading="Enter your mobile number to continue">
+    <AuthLayout heading={heading ?? "Find guaranteed parking"} subheading={subheading ?? "Enter your mobile number to continue"}>
       <form className={authLayoutStyles.form} onSubmit={handleSubmit}>
         {error && <InlineBanner variant="danger">{error}</InlineBanner>}
         <TextField

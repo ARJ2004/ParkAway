@@ -3,10 +3,10 @@ import { useTheme } from "../theme";
 
 export interface BadgeProps {
   label: string;
-  variant?: "success" | "accent" | "neutral";
+  variant?: "success" | "accent" | "neutral" | "warning" | "danger";
 }
 
-/** Small status pill — "Default" on a vehicle card, "Verified" next to a phone number, etc. */
+/** Small status pill — "Default" on a vehicle card, "Verified" next to a phone number, etc. Same variant set as ui-web's Badge. */
 export function Badge({ label, variant = "neutral" }: BadgeProps) {
   const theme = useTheme();
   const c = theme.colors;
@@ -15,6 +15,8 @@ export function Badge({ label, variant = "neutral" }: BadgeProps) {
     success: { bg: c.successSoft, text: c.success },
     accent: { bg: c.accentSoft, text: c.accent },
     neutral: { bg: c.background, text: c.textSecondary },
+    warning: { bg: c.warningSoft, text: c.warning },
+    danger: { bg: c.dangerSoft, text: c.danger },
   };
   const v = variants[variant];
 

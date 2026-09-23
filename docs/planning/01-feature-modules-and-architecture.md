@@ -19,8 +19,8 @@ Client surfaces referenced throughout:
 |---|---|---|
 | **Driver Mobile App** | Drivers | Primary demand-side app (iOS/Android) |
 | **Driver Web** | Drivers | Lightweight web fallback for search/booking (esp. for concierge-MVP-style acquisition, WhatsApp/landing-page flows) |
-| **Host/Owner App** | Individual hosts, business hosts | Mobile-first, web-usable; listing + earnings management |
-| **Property Manager Web Console** | Property managers, society admins, corporate admins | Desktop-oriented; inventory, permits, visitors, billing |
+| **Host/Owner persona** | Individual hosts, business hosts | **Not a separate app** (decided 2026-09-23). Owners log in through the same phone+OTP flow as drivers and pick a persona; the owner persona is a distinct mode inside the Driver Mobile App and Driver Web, with its own theme, navigation and screens. Listing + earnings management. See `05-sprint-2-detailed-plan.md` Ticket Group D. |
+| **Property Manager Web Console** | Property managers, society admins, corporate admins | Desktop-oriented; inventory, permits, visitors, billing. **Folded into `apps/driver-web`'s codebase as its own route tree (`/manage/*`), not a separate `apps/property-web` app** (revised 2026-09-23, superseding locked decision O-10 in `05-sprint-2-detailed-plan.md` — the user's explicit direction during implementation). It keeps its own login entry point (`/manage/login`, same phone+OTP identity system, redirects straight to the property list rather than the driver/owner persona picker) and its own theme (reuses `admin`), so it still reads as a distinct surface to the person using it — the change is deployment/routing, not design. |
 | **Security Guard App** | On-site security staff | Mobile/tablet, must tolerate poor connectivity |
 | **Admin Web Console** | Platform admin/ops team | Internal only, RBAC-gated |
 | **Public Web (marketing/landing)** | Prospective drivers/hosts | Acquisition surface, esp. for concierge MVP validation phase |

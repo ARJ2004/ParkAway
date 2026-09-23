@@ -1,13 +1,19 @@
-import { Button, Card, InlineBanner, TextField } from "@parkaway/ui-web";
+import { Badge, Button, Card, InlineBanner, TextField } from "@parkaway/ui-web";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ApiError } from "../api/client";
+import { getPersonas, selectPersona } from "../api/personas";
 import { getProfile, updateProfile } from "../api/profile";
 import { AppShell } from "../components/AppShell";
+import { OwnerAppShell } from "../components/OwnerAppShell";
+import { setActiveTheme } from "../theme";
 
 export function ProfileScreen() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: profile } = useQuery({ queryKey: ["profile"], queryFn: getProfile });
+  const { data: personas } = useQuery({ queryKey: ["personas"], queryFn: getPersonas });
 
   // Undefined = "not yet edited this session" -> falls back to the server
   // value below. A real string once the user types, taking over from there.
@@ -35,10 +41,33 @@ export function ProfileScreen() {
     },
   });
 
+  const switchMutation = useMutation({
+    mutationFn: (persona: "driver" | "owner") => selectPersona(persona),
+    onSuccess: (result) => {
+      queryClient.setQueryData(["personas"], result);
+      if (result.lastPersona === "owner") {
+        setActiveTheme("host");
+        navigate("/owner", { replace: true });
+      } else {
+        setActiveTheme("driver");
+        navigate("/home", { replace: true });
+      }
+    },
+  });
+
   if (!profile) return null;
 
+  // The single deliberate shared-screen exception to "the fork happens once,
+  // at the navigator" (§3.1 rule 2) — a person's name and phone don't change
+  // with their hat, so this one screen picks its shell by current persona
+  // rather than living in only one navigator.
+  const isOwner = personas?.lastPersona === "owner";
+  const Shell = isOwner ? OwnerAppShell : AppShell;
+  const otherPersona: "driver" | "owner" = isOwner ? "driver" : "owner";
+  const hasHostRole = personas?.granted.includes("host");
+
   return (
-    <AppShell>
+    <Shell>
       <h1>Profile</h1>
       <Card>
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
@@ -63,6 +92,23 @@ export function ProfileScreen() {
           </Button>
         </div>
       </Card>
-    </AppShell>
+
+      {personas && (
+        <Card>
+          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+            <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--color-text-secondary)" }}>Mode</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span>Currently in {isOwner ? "owner" : "driver"} mode <Badge label={isOwner ? "Owner" : "Driver"} variant="accent" /></span>
+              <Button variant="secondary" size="sm" onClick={() => switchMutation.mutate(otherPersona)} loading={switchMutation.isPending}>
+                Switch to {otherPersona}
+              </Button>
+            </div>
+            {otherPersona === "owner" && !hasHostRole && (
+              <p style={{ fontSize: "12px", color: "var(--color-text-muted)", margin: 0 }}>Have a parking space? Switching starts your host onboarding.</p>
+            )}
+          </div>
+        </Card>
+      )}
+    </Shell>
   );
 }

@@ -41,11 +41,10 @@ export function OtpEntryScreen({ route, navigation }: Props) {
     try {
       const result = await verifyOtp(phone, submittedCode);
       await setSession(result.accessToken, result.refreshToken);
-      // login() flips RootNavigator to the onboarding stack for a new user,
-      // or straight to the app for a returning one — the wizard is a
-      // new-user-only moment and, since a phone number only registers once,
-      // it naturally never reappears on any later login.
-      login(result.isNewUser);
+      // login() resolves persona state (RootNavigator then routes to the
+      // persona picker on first login, or straight to the right persona's
+      // stack on a return visit — see RootNavigator.tsx).
+      await login(result.isNewUser);
     } catch (err) {
       if (err instanceof ApiError) {
         const messages: Record<string, string> = {

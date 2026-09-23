@@ -22,6 +22,20 @@
       "when": 1789961719208,
       "tag": "0002_old_justin_hammer",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1790105572882,
+      "tag": "0003_enable_postgis",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1790181036971,
+      "tag": "0004_sprint2_property_listing_pricing",
+      "breakpoints": true
     }
   ]
 }

@@ -16,12 +16,12 @@ Nothing else should move to "In Progress" until these are signed off (see `01-fe
 - [ ] GATE-03 — Approve inventory locking/concurrency strategy
 - [ ] GATE-04 — Approve cancellation/refund matrix
 - [ ] GATE-05 — Approve host payout/settlement policy
-- [ ] GATE-06 — Approve property authorization rules
+- [x] GATE-06 — Approve property authorization rules. **Closed 2026-09-23** — one live authorization per property (query-time expiry, never job-dependent), transactional revocation cascade with `FOR UPDATE` locking against concurrent publish (see `05-sprint-2-detailed-plan.md` §2.5 R1), `owner_self` auto-authorization for individual owners, level 3 (property authorization) mandatory inside `society`/`commercial` properties. Built and Testcontainers-tested.
 - [ ] GATE-07 — Approve access failure fallback procedure
 - [ ] GATE-08 — Approve no-show/overstay rules
 - [ ] GATE-09 — Approve dispute evidence & SLA rules
 - [ ] GATE-10 — Approve admin override permission model
-- [ ] GATE-11 — Approve PII/KYC/payment data handling & retention policy
+- [x] GATE-11 — Approve PII/KYC/payment data handling & retention policy. **Closed 2026-09-23** — `platform_admin`-only access to identity documents and payout reveals, both audited before the underlying action (`document.download`, `host.payout.revealed`); payout account numbers AES-256-GCM encrypted at rest with the key held outside the database (`PAYOUT_ENCRYPTION_KEY`, never in `pg_dump`); retention set to active-host + 8 years after last payout (locked decision 12). **The 8-year figure is an engineering default, not legal advice — still needs confirmation from whoever gives ParkAway legal/tax advice before launch**, per `05-sprint-2-detailed-plan.md`.
 - [ ] GATE-12 — Fix MVP geography and supply type (single micro-market)
 - [ ] GATE-13 — Fix MVP parking types and vehicle categories
 - [ ] GATE-14 — Fix success metrics (successful sessions, failed sessions, repeat rate, utilization, GMV, contribution margin)

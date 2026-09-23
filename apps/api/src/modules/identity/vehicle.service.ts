@@ -40,20 +40,31 @@ export async function addVehicle(db: Db, userId: string, params: AddVehicleParam
       .where(and(eq(vehicles.userId, userId), eq(vehicles.status, "active")));
 
     try {
-      const [created] = await tx
-        .insert(vehicles)
-        .values({
-          userId,
-          registrationNo,
-          type: params.type,
-          makeModel: params.makeModel,
-          // First active vehicle becomes default automatically — a driver
-          // with exactly one vehicle should never have to take an extra step
-          // to make it selectable as their default.
-          isDefault: existingActive.length === 0,
-        })
-        .returning();
-      if (!created) throw new Error("Vehicle insert returned no row");
+      // Nested `tx.transaction()` = a real SAVEPOINT. A unique-violation on
+      // this insert aborts the *whole* enclosing Postgres transaction, not
+      // just this statement — without the savepoint, the fallback insert in
+      // the DEFAULT_UNIQUE_CONSTRAINT branch below would itself fail with
+      // "current transaction is aborted, commands ignored until end of
+      // transaction block" even though it's the intended, idempotent
+      // recovery path (found via the identical bug in
+      // identity/persona.service.ts — same fix applied here).
+      const created = await tx.transaction(async (tx2) => {
+        const [row] = await tx2
+          .insert(vehicles)
+          .values({
+            userId,
+            registrationNo,
+            type: params.type,
+            makeModel: params.makeModel,
+            // First active vehicle becomes default automatically — a driver
+            // with exactly one vehicle should never have to take an extra step
+            // to make it selectable as their default.
+            isDefault: existingActive.length === 0,
+          })
+          .returning();
+        if (!row) throw new Error("Vehicle insert returned no row");
+        return row;
+      });
       return created;
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;

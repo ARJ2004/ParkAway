@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { requestOtp, verifyOtp } from "../api/auth";
 import { ApiError } from "../api/client";
+import { getPersonas } from "../api/personas";
 import { setSession } from "../session";
+import { setActiveTheme } from "../theme";
 import { AuthLayout, authLayoutStyles } from "../components/AuthLayout";
 
 const RESEND_COOLDOWN_SECONDS = 30;
@@ -16,7 +18,9 @@ const OTP_LENGTH = 6;
 export function OtpEntryScreen() {
   const location = useLocation();
   const navigate = useNavigate();
-  const phone = (location.state as { phone?: string } | null)?.phone;
+  const locationState = location.state as { phone?: string; next?: "manage" } | null;
+  const phone = locationState?.phone;
+  const next = locationState?.next;
 
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -25,9 +29,9 @@ export function OtpEntryScreen() {
 
   useEffect(() => {
     if (!phone) {
-      navigate("/", { replace: true });
+      navigate(next === "manage" ? "/manage/login" : "/", { replace: true });
     }
-  }, [phone, navigate]);
+  }, [phone, next, navigate]);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -42,11 +46,29 @@ export function OtpEntryScreen() {
     try {
       const result = await verifyOtp(phone, submittedCode);
       setSession(result.accessToken, result.refreshToken);
-      // New users see the recommended-but-skippable onboarding wizard;
-      // returning users go straight to home — the wizard is a new-user-only
-      // moment and, since a phone number only ever registers once, it
-      // naturally never reappears on any later login.
-      navigate(result.isNewUser ? "/onboarding/profile" : "/home", { replace: true });
+
+      // The Property Manager Console has its own login entry point and never
+      // sees the driver/owner persona picker — a property manager isn't
+      // necessarily a driver or a host at all (§2.2a's persona-vs-auth split
+      // stays intact: `/manage`'s screens still authorize every request via
+      // requirePropertyScope, this redirect is only UI routing).
+      if (next === "manage") {
+        navigate("/manage", { replace: true });
+        return;
+      }
+
+      const personas = await getPersonas();
+      if (personas.lastPersona === null) {
+        // First login (or an existing Sprint 1 account that's never chosen a
+        // persona) — the picker is a first-login moment, not a per-login toll.
+        navigate("/persona", { replace: true, state: { isNewUser: result.isNewUser } });
+      } else if (personas.lastPersona === "owner") {
+        setActiveTheme("host");
+        navigate("/owner", { replace: true });
+      } else {
+        setActiveTheme("driver");
+        navigate(result.isNewUser ? "/onboarding/profile" : "/home", { replace: true });
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         // Each failure mode gets its own specific message — never a shared
@@ -97,7 +119,7 @@ export function OtpEntryScreen() {
         <button
           type="button"
           className={authLayoutStyles.link}
-          onClick={() => navigate("/", { replace: true })}
+          onClick={() => navigate(next === "manage" ? "/manage/login" : "/", { replace: true })}
         >
           Change number
         </button>

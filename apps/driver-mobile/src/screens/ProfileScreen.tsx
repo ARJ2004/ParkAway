@@ -1,5 +1,4 @@
 import { Badge, Button, Card, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
-import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
@@ -8,10 +7,7 @@ import { logout as apiLogout } from "../api/auth";
 import { ApiError } from "../api/client";
 import { getProfile, updateProfile, type Profile } from "../api/profile";
 import { useAuth } from "../navigation/AuthContext";
-import type { MainTabParamList } from "../navigation/MainTabs";
 import { clearSession, getRefreshToken } from "../session";
-
-type Props = BottomTabScreenProps<MainTabParamList, "Profile">;
 
 function initialsOf(name: string | null): string {
   if (!name) return "?";
@@ -24,14 +20,17 @@ function initialsOf(name: string | null): string {
  * clearly separated destructive row at the bottom — not a button buried in
  * a nav bar. Draws on the Affirm/Freenow/PayPal reference pattern (header
  * card, grouped settings, log-out last), restyled in ParkAway's palette.
+ *
+ * Shared across both `MainTabs` and `OwnerTabs` (deliberately not typed
+ * against either tab navigator's param list) — a person's name and phone
+ * don't change with their hat. Takes no navigation props; sign-out and the
+ * persona switch both go through `AuthContext`, never a direct navigation call.
  */
-// `navigation`/`route` are unused — sign-out is handled via AuthContext's
-// `logout()`, which flips RootNavigator back to the auth stack, not a
-// direct navigation call.
-export function ProfileScreen(_props: Props) {
+export function ProfileScreen() {
   const theme = useTheme();
   const c = theme.colors;
-  const { logout } = useAuth();
+  const { logout, activePersona, selectPersona } = useAuth();
+  const [switching, setSwitching] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState<string | undefined>(undefined);
   const [email, setEmail] = useState<string | undefined>(undefined);
@@ -69,6 +68,16 @@ export function ProfileScreen(_props: Props) {
     logout();
     if (refreshToken) {
       apiLogout(refreshToken).catch(() => {});
+    }
+  }
+
+  async function handleSwitchPersona() {
+    const next = activePersona === "owner" ? "driver" : "owner";
+    setSwitching(true);
+    try {
+      await selectPersona(next);
+    } finally {
+      setSwitching(false);
     }
   }
 
@@ -114,6 +123,23 @@ export function ProfileScreen(_props: Props) {
           </Button>
         </Card>
 
+        <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>Mode</Text>
+        <Card style={styles.card}>
+          <View style={styles.modeRow}>
+            <View style={styles.modeText}>
+              <Text style={[styles.modeLabel, { color: c.textPrimary, fontFamily: theme.fonts.bodySemibold }]}>
+                {activePersona === "owner" ? "Owner mode" : "Driver mode"}
+              </Text>
+              <Text style={[styles.modeHint, { color: c.textMuted, fontFamily: theme.fonts.body }]}>
+                {activePersona === "owner" ? "Managing your parking spaces" : "Finding and booking parking"}
+              </Text>
+            </View>
+            <Button variant="secondary" onPress={handleSwitchPersona} loading={switching}>
+              {`Switch to ${activePersona === "owner" ? "driver" : "owner"}`}
+            </Button>
+          </View>
+        </Card>
+
         <Card style={[styles.signOutCard, { borderColor: c.dangerSoft }]}>
           <Button variant="danger" fullWidth onPress={handleLogout}>
             Sign out
@@ -135,5 +161,9 @@ const styles = StyleSheet.create({
   phone: { fontSize: 14 },
   sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
   card: { gap: 16 },
+  modeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  modeText: { flex: 1, gap: 2 },
+  modeLabel: { fontSize: 15 },
+  modeHint: { fontSize: 12 },
   signOutCard: { borderWidth: 1, backgroundColor: "transparent", padding: 4 },
 });

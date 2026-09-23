@@ -1,11 +1,20 @@
 import type { ReactNode } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { logout } from "../api/auth";
 import { clearSession, getRefreshToken } from "../session";
+import { setActiveTheme } from "../theme";
 import styles from "./AppShell.module.css";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+
+  // Re-applies the driver theme on mount so a hard refresh (or the back
+  // button) on a driver route never gets stuck showing the owner persona's
+  // theme — theme state lives only in a DOM attribute, not persisted.
+  useEffect(() => {
+    setActiveTheme("driver");
+  }, []);
 
   async function handleLogout() {
     const refreshToken = getRefreshToken();

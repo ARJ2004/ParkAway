@@ -9,7 +9,7 @@ import {
   type ColorRoles,
 } from "@parkaway/design-tokens";
 import { createContext, useContext, type ReactNode } from "react";
-import { FONT_BODY, FONT_BODY_MEDIUM, FONT_BODY_SEMIBOLD, FONT_HEADING_SEMIBOLD, FONT_HEADING_BOLD } from "./fonts";
+import { FONT_BODY, FONT_BODY_MEDIUM, FONT_BODY_SEMIBOLD, FONT_BODY_SEMIBOLD_600, FONT_HEADING_SEMIBOLD, FONT_HEADING_BOLD } from "./fonts";
 
 export interface Theme {
   colors: ColorRoles;
@@ -21,6 +21,7 @@ export interface Theme {
   fonts: {
     body: string;
     bodyMedium: string;
+    bodySemibold600: string;
     bodySemibold: string;
     headingSemibold: string;
     headingBold: string;
@@ -32,11 +33,11 @@ export function lineHeightFor(fontSizePx: number, weight: keyof typeof lineHeigh
   return Math.round(fontSizePx * lineHeightMultiplier[weight]);
 }
 
-// Driver Mobile App is the only native surface built this sprint — Host/Owner
-// App and Security Guard App will each get their own theme object here later
-// (same shared scale, different color roles), same pattern as ui-web's
-// driver/admin split.
-const driverNativeTheme: Theme = {
+// Driver and owner personas share one palette by design (2026-09-23 redesign
+// — see design-tokens/themes.ts's doc comment): there is deliberately no
+// per-persona theme object here to swap at runtime. The persona switch pill
+// (HomeScreen/OwnerHomeScreen) changes content and navigation, not color.
+const parkAwayNativeTheme: Theme = {
   colors: driverTheme,
   space: spaceRaw,
   radius: radiusRaw,
@@ -46,16 +47,17 @@ const driverNativeTheme: Theme = {
   fonts: {
     body: FONT_BODY,
     bodyMedium: FONT_BODY_MEDIUM,
+    bodySemibold600: FONT_BODY_SEMIBOLD_600,
     bodySemibold: FONT_BODY_SEMIBOLD,
     headingSemibold: FONT_HEADING_SEMIBOLD,
     headingBold: FONT_HEADING_BOLD,
   },
 };
 
-const ThemeContext = createContext<Theme>(driverNativeTheme);
+const ThemeContext = createContext<Theme>(parkAwayNativeTheme);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  return <ThemeContext.Provider value={driverNativeTheme}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={parkAwayNativeTheme}>{children}</ThemeContext.Provider>;
 }
 
 export function useTheme(): Theme {

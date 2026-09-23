@@ -1,7 +1,7 @@
 # ParkAway — Progress
 
-**Last updated:** 2026-09-23
-**Status:** Sprint 1 (identity, profiles, admin foundation) built end-to-end across backend, both web apps, and the mobile app, and audited against the original acceptance criteria — the four gaps that audit found are fixed and tested (see "Audit against Sprint 1 plan" below). Not yet device-tested on mobile; several product decisions still open (listed below).
+**Last updated:** 2026-09-24
+**Status:** Sprint 1 (identity, profiles, admin foundation) and Sprint 2 (property & listing foundation) are both built and tested, and Sprint 2's mobile deferral has been paid off — `driver-mobile` now has the full owner persona (property → listing wizard → photos → pricing → submit, plus host KYC/payout) alongside `driver-web`'s and `admin-web`'s Sprint 2 work. As of this update, **priority is mobile + admin-web only** — `driver-web` is frozen except for shared-package fallout, per explicit direction. The whole product also now runs on a single unified visual design (see "Design system refresh" below), pulled from the user's own Claude-Artifact mockup rather than an AI-generated default. Several product decisions still open (listed below).
 
 This is a standing status summary — update it at the end of each sprint, not a historical log of every change. For day-to-day decision history, see `docs/planning/04-sprint-1-detailed-plan.md`'s "Implementation status" entries and the git log. For repo conventions and setup, see `CLAUDE.md` and `README.md`.
 
@@ -19,7 +19,9 @@ Fastify + Drizzle/PostgreSQL+PostGIS + Redis, covering `AUTH-01`–`04`, `ADM-01
 - **Admin auth + RBAC** — email/password login, two roles (`platform_admin` full access, `support` sees masked PII), generic invalid-credentials error that never reveals whether an email exists; every admin user-management route now enforces role via `requireAdminRole`, not just authentication
 - **Driver profile & vehicles** — CRUD, phone immutable (rejected explicitly, not silently ignored), vehicle registration numbers validated against the standard Indian format (`KA05HR1096`-style) and **globally unique while active** — one live account per plate system-wide, not per-user
 - **Admin user management** — search (phone/ID/vehicle/email) with role-based PII masking, suspend/restore with a required reason, every action audited
-- **Shared infrastructure** — `audit_log` (actor/timestamp/source/reason on every status change), provider-adapter pattern for the OTP/SMS integration, S3-ready photo upload path (presigned URLs, not proxied)
+- **Shared infrastructure** — `audit_log` (actor/timestamp/source/reason on every status change), provider-adapter pattern for the OTP/SMS integration
+
+**Correction (2026-09-23, found while planning Sprint 2):** an earlier version of this line claimed an "S3-ready photo upload path (presigned URLs, not proxied)" was part of Sprint 1's shared infrastructure. **It isn't** — there is no S3 code anywhere in `apps/api`, no storage adapter, and no presign route; `users.photo_url` is a bare text column. Object storage is a Sprint 2 deliverable built from zero (see `docs/planning/05-sprint-2-detailed-plan.md`, "Pre-flight"). Same class of gap as the four the Sprint 1 audit caught — documented as done, never built.
 
 **Two real concurrency bugs were found and fixed by tests, not by review:**
 1. Refresh-token rotation had a genuine race (two concurrent refreshes on the same token could both succeed) — fixed by making the revoke itself an atomic `UPDATE ... WHERE ... AND revoked_at IS NULL` claim.
@@ -89,8 +91,44 @@ All four were fixed with real code changes, not documentation edits, and all fou
 - Password hashing is bcrypt, not the originally-specified argon2id — `argon2` needs a native build step this dev environment can't guarantee; bcrypt at cost factor 12 is still industry-standard. Isolated to one file, swappable later.
 - `ui-web` and `ui-native` are two independent implementations of the same component contract, with nothing but convention enforcing they stay in sync. Fine at the current size; worth a shared contract test if a third surface joins and drift becomes a real problem rather than a named risk.
 
+## Sprint 2 (Property & Listing Foundation)
+
+Full detail in `docs/planning/05-sprint-2-detailed-plan.md`'s "Implementation status" section at the top of that document — summarized here.
+
+**Built and tested:** the full backend spine (PostGIS, `StorageProvider`/`MapsProvider` adapters, persona + role model, properties/authorizations/access-policies, host profiles + KYC + encrypted payout, listings/photos/lifecycle/pricing, admin moderation, the BullMQ verification-expiry sweep); the Admin Web Console's listing moderation queue **plus a new host KYC review screen** (`/hosts/:id/kyc` — document viewing, approve/reject, audited payout reveal); `driver-web`'s full persona fork (persona picker, owner persona with a 5-step listing wizard, host KYC/payout, and the Property Manager Console at `/manage/*`); and — new this update — **`driver-mobile`'s full owner persona**, built natively rather than a ported web layout: `PersonaScreen` (first-login picker), a `PersonaSwitchPill` switcher, a bottom-tab `OwnerStack` (Home/Spaces/Profile), property creation with a GPS-based `LocationField`, a 5-step listing wizard (fit/photos/access/price/review) with an `expo-image-picker`-based `PhotoPicker` doing the full presign→PUT→complete upload flow, and host KYC/payout screens. All five touched apps (`api`, `driver-web`, `admin-web`, `driver-mobile`, plus the shared packages) typecheck, lint, and build clean — mobile confirmed via both `tsc --noEmit` and a full Metro production bundle (987 modules, no resolution errors).
+
+**Two real bugs were caught by tests during Sprint 2's initial build** (full detail in the plan doc): the pricing resolver was using the server's local system timezone instead of a fixed IST offset for peak/weekend windows, and the `user_roles` "one live grant" unique index provided no actual protection for unscoped roles (`host`) because Postgres treats every `NULL` as distinct — both fixed and covered by regression tests.
+
+**One deviation from the locked plan**, on the user's explicit direction during implementation: the Property Manager Console lives inside `apps/driver-web` (`/manage/*`, its own login) rather than a separate `apps/property-web` app, superseding locked decision O-10.
+
+### Bugs found and fixed after initial device/browser testing (2026-09-24)
+
+Once the app was actually exercised (browser network tab + real server logs, rather than curl alone), several more bugs surfaced — all fixed and, where the fix is a systemic pattern rather than a one-off, covered by new regression tests:
+
+1. **Bodyless mutating requests (`submit`/`pause`/`archive`/…) 500'd** with `FST_ERR_CTP_EMPTY_JSON_BODY` — the client's `apiRequest()` was always sending `Content-Type: application/json` even with no body. Fixed in all three apps' `api/client.ts` (only set the header when a body is actually present); the server error handler now also passes through real `FastifyError` 4xx statuses instead of flattening every non-`AppError` into a generic 500, so this class of bug fails loudly instead of as an opaque `INTERNAL_ERROR` next time.
+2. **Mock storage URLs were hardcoded to `localhost`**, so listing photos/documents were unreachable from a physical phone on the LAN. Fixed with an `AsyncLocalStorage`-based `requestOrigin.ts` that captures the actual `Host` header per-request and threads it into `mockStorageProvider`'s URL generation, instead of a static `STORAGE_MOCK_BASE_URL`.
+3. **`current transaction is aborted, commands ignored until end of transaction block`** — a systemic bug, not a one-off: catching a unique-violation mid-transaction (e.g. "you already hold the `host` role") aborts the *whole* enclosing Postgres transaction, not just the failed statement, so any later query on that same `tx` handle failed. Found live via a real repro (select owner → switch to driver → select owner again). Fixed in all three places it existed — `persona.service.ts`, `host-profile.service.ts`, and a pre-existing Sprint 1 instance in `identity/vehicle.service.ts` — by wrapping the risky insert in a nested `tx.transaction()` (a real Postgres SAVEPOINT), and covered by two new regression tests in `concurrency.test.ts`.
+4. **Mobile's listing review step allowed re-submitting an already-submitted listing**, which 409'd — `ListingWizardScreen`'s `ReviewStep` now shows a read-only status instead of a submit button once `status !== "draft"`.
+
+### Design system refresh (2026-09-24)
+
+Applied the user's own Claude-Artifact-designed palette and type system across the whole product (mobile + admin-web; driver-web inherits it structurally through the shared packages even though it's not the active focus):
+
+- `packages/design-tokens` — collapsed the three separate per-surface themes (`driver`/`admin`/`host`) into one unified `parkAwayTheme` (ink/bone/brass/forest/rust palette), bumped the radius scale, and switched the type system to Marcellus (headings) + Manrope (body), replacing Sora/Inter.
+- `packages/ui-web` and `packages/ui-native` — updated component-level styling (`TextField`, `Card`, `Modal`, `Button`, `Badge`) to match: new radii, `surfaceRaised` backgrounds, and (native) the new Google Fonts.
+- `apps/driver-mobile` — swapped `@expo-google-fonts/inter`/`sora` for `manrope`/`marcellus`; removed the old per-persona theme-swap concept from `ui-native/theme.tsx` since driver and owner now share one palette (the persona *mode* is still visually distinct via the `PersonaSwitchPill` and navigation, not via a second color theme).
+
+Mobbin MCP was used for UX-pattern research while fixing the bugs above and building out the mobile owner-persona screens (bottom-tab and garage/listing-manager reference patterns), consistent with the design philosophy in `frontend.md`.
+
+**Deferred, not forgotten:** the Playwright E2E harness, mobile Jest/RNTL tests, and two specific test gaps (a sweep-job re-fire/idempotency test, a full lifecycle-transition-matrix unit test). The Testcontainers suite (including the newest regression tests above) has not run to completion this session — Docker Desktop was unresponsive to `docker ps` for a significant part of it; the already-running dev containers kept serving the live API fine throughout, which is how all the live-verification above was possible.
+
+`GATE-06` and `GATE-11` are checked off in `02-kanban-board.md`, with their answers recorded there.
+
 ## Suggested next steps
 
-1. Get the mobile app running on an actual device (Expo Go is the fastest path — no SDK/emulator install needed) and do a real click-through.
-2. Resolve the four open items above, or explicitly decide to keep carrying them forward.
-3. Start Sprint 2 (Property & Listing Foundation) per `docs/planning/03-sprint-plan.md` — nothing built so far blocks it.
+1. **Run the full Testcontainers suite** (`npm run test --workspace apps/api`) once Docker Desktop recovers — it was unresponsive to `docker ps` for a stretch of this session, so the newest regression tests (transaction-abort fixes, bodyless-mutation fixes) have been typechecked and manually verified live but not yet run through the automated suite.
+2. **Click through `driver-web`'s Sprint 2 screens in an actual browser** — still not done (driver-web is deprioritized, not abandoned); typecheck/lint/build are real signal but not a substitute for a click-through.
+3. Fill the remaining Sprint 2 test gaps named above (Playwright E2E, mobile unit tests, the sweep-job re-fire case, the lifecycle-transition-matrix table).
+4. Back up `PAYOUT_ENCRYPTION_KEY` somewhere a database restore can't reach, before a real (non-test) host enters an account number — still the one irreversible prerequisite, now live in code rather than just planned.
+5. Continue the mobile bug-hunt — the transaction-abort bug was found via a real device report, not exhaustive review; treat it as a signal there may be more undiscovered instances of related bug classes, not as the last one.
+6. Start Sprint 3 (Search & Availability) once the above is settled — it depends directly on the `properties`/`listings`/PostGIS foundation this sprint built.

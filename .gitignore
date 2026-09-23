@@ -14,6 +14,9 @@ pnpm-debug.log*
 dist/
 build/
 out/
+
+# Mock StorageProvider's local-disk backing (dev/CI only — STORAGE_PROVIDER=mock)
+.mock-storage/
 .next/
 *.tsbuildinfo
 

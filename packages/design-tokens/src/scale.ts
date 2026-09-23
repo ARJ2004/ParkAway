@@ -25,8 +25,9 @@ export const spaceRaw = {
 
 export const radiusRaw = {
   sm: 6,
-  md: 10,
-  lg: 16,
+  md: 12,
+  lg: 18,
+  xl: 22,
   pill: 999,
 } as const;
 
@@ -67,12 +68,15 @@ export const radius = toPx(radiusRaw);
 export const fontSize = toPx(fontSizeRaw);
 
 export const fontFamily = {
-  // Sora carries the display/heading moments (distinctive, geometric, not a
-  // system-default sans) — Inter handles body/UI text where legibility at
-  // small sizes matters more than character. Loaded via Google Fonts on web;
-  // native loads the same two families as local font assets (see ui-native).
-  heading: "'Sora', system-ui, sans-serif",
-  body: "'Inter', system-ui, sans-serif",
+  // Marcellus (a serif display face) carries heading/hero moments — a
+  // deliberate, distinctive choice over a generic sans display face; Manrope
+  // handles body/UI text across every weight the product uses (400-800).
+  // Sourced from the product's own design canvas (2026-09-23 redesign),
+  // superseding the earlier Sora/Inter pairing. Loaded via Google Fonts on
+  // web; native loads the same two families as local font assets (see
+  // ui-native/fonts.ts).
+  heading: "'Marcellus', Georgia, serif",
+  body: "'Manrope', -apple-system, system-ui, sans-serif",
 } as const;
 
 export const lineHeight = {

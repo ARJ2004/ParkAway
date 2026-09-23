@@ -1,0 +1,88 @@
+.page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2xl);
+  /* Neutral ground — the only screen in the app that holds both palettes
+     at once rather than committing to either (§3.1's design note). */
+  background: #F2F1EE;
+}
+
+.wrap {
+  width: 100%;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+}
+
+.heading {
+  text-align: center;
+  font-family: var(--font-heading);
+  font-size: var(--font-size-xl);
+  color: #1F241F;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+}
+
+@media (max-width: 640px) {
+  .cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl);
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  transition:
+    transform var(--motion-fast) var(--motion-easing),
+    box-shadow var(--motion-fast) var(--motion-easing);
+  box-shadow: var(--shadow-sm);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.card:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.driverCard {
+  background: #FBF8F3;
+  color: #1F2A24;
+}
+
+.ownerCard {
+  background: #F3F5F6;
+  color: #16211E;
+}
+
+.icon {
+  font-size: 32px;
+}
+
+.cardTitle {
+  font-family: var(--font-heading);
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+}
+
+.cardBody {
+  font-size: var(--font-size-sm);
+  opacity: 0.85;
+}

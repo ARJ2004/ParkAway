@@ -3,10 +3,12 @@ import { clearSession, getAccessToken, getRefreshToken, setSession } from "../se
 export class ApiError extends Error {
   code: string;
   status: number;
-  constructor(status: number, code: string, message: string) {
+  details?: unknown;
+  constructor(status: number, code: string, message: string, details?: unknown) {
     super(message);
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -42,7 +44,13 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { method = "GET", body, auth = true } = options;
 
   async function doFetch(): Promise<Response> {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    const headers: Record<string, string> = {};
+    // Only send Content-Type: application/json when there's actually a body
+    // — Fastify's default JSON parser throws FST_ERR_CTP_EMPTY_JSON_BODY on
+    // an empty body with that header set (e.g. POST /submit, /pause, /archive
+    // take no body), which this app's error handler was turning into a
+    // generic 500 instead of the real 400.
+    if (body !== undefined) headers["Content-Type"] = "application/json";
     if (auth) {
       const token = getAccessToken();
       if (token) headers.Authorization = `Bearer ${token}`;
@@ -67,15 +75,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (!res.ok) {
     let code = "UNKNOWN_ERROR";
     let message = `Request failed (${res.status})`;
+    let details: unknown;
     try {
       const body = await res.json();
       code = body.error?.code ?? code;
       message = body.error?.message ?? message;
+      details = body.error?.details;
     } catch {
       // non-JSON error body — fall back to the generic message above
     }
     if (res.status === 401) clearSession();
-    throw new ApiError(res.status, code, message);
+    throw new ApiError(res.status, code, message, details);
   }
 
   if (res.status === 204) return undefined as T;
