@@ -14,6 +14,11 @@ import { PropertyFormScreen } from "../screens/owner/PropertyFormScreen";
 import { ListingWizardScreen } from "../screens/owner/ListingWizardScreen";
 import { HostKycScreen } from "../screens/owner/HostKycScreen";
 import { HostPayoutScreen } from "../screens/owner/HostPayoutScreen";
+import { OwnerBookingDetailScreen } from "../screens/owner/OwnerBookingDetailScreen";
+import { OwnerListingDetailScreen } from "../screens/owner/OwnerListingDetailScreen";
+import { DriverSpotDetailScreen } from "../screens/DriverSpotDetailScreen";
+import { DriverBookingConfirmedScreen } from "../screens/DriverBookingConfirmedScreen";
+import { DriverActiveSessionScreen } from "../screens/DriverActiveSessionScreen";
 
 export type AuthStackParamList = {
   PhoneEntry: undefined;
@@ -32,7 +37,10 @@ export type OnboardingStackParamList = {
  */
 export type AppStackParamList = {
   MainTabs: undefined;
-  VehicleForm: undefined;
+  VehicleForm: { vehicleId?: string } | undefined;
+  DriverSpotDetail: { spotId: string };
+  DriverBookingConfirmed: undefined;
+  DriverActiveSession: undefined;
 };
 
 /**
@@ -46,6 +54,8 @@ export type OwnerStackParamList = {
   ListingWizard: { listingId: string; step?: string };
   HostKyc: undefined;
   HostPayout: undefined;
+  OwnerBookingDetail: { bookingId: string };
+  OwnerListingDetail: { listingId: string };
 };
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -91,10 +101,12 @@ export function RootNavigator() {
     return (
       <OwnerStack.Navigator screenOptions={screenOptions}>
         <OwnerStack.Screen name="OwnerTabs" component={OwnerTabs} />
-        <OwnerStack.Screen name="PropertyForm" component={PropertyFormScreen} options={{ headerShown: true, title: "Add property" }} />
+        <OwnerStack.Screen name="PropertyForm" component={PropertyFormScreen} />
         <OwnerStack.Screen name="ListingWizard" component={ListingWizardScreen} />
         <OwnerStack.Screen name="HostKyc" component={HostKycScreen} />
         <OwnerStack.Screen name="HostPayout" component={HostPayoutScreen} />
+        <OwnerStack.Screen name="OwnerBookingDetail" component={OwnerBookingDetailScreen} />
+        <OwnerStack.Screen name="OwnerListingDetail" component={OwnerListingDetailScreen} />
       </OwnerStack.Navigator>
     );
   }
@@ -111,17 +123,10 @@ export function RootNavigator() {
   return (
     <AppStack.Navigator screenOptions={screenOptions}>
       <AppStack.Screen name="MainTabs" component={MainTabs} />
-      <AppStack.Screen
-        name="VehicleForm"
-        component={VehicleFormScreen}
-        options={{
-          headerShown: true,
-          title: "Add vehicle",
-          headerStyle: { backgroundColor: theme.colors.surface },
-          headerTintColor: theme.colors.textPrimary,
-          headerShadowVisible: false,
-        }}
-      />
+      <AppStack.Screen name="VehicleForm" component={VehicleFormScreen} />
+      <AppStack.Screen name="DriverSpotDetail" component={DriverSpotDetailScreen} />
+      <AppStack.Screen name="DriverBookingConfirmed" component={DriverBookingConfirmedScreen} />
+      <AppStack.Screen name="DriverActiveSession" component={DriverActiveSessionScreen} />
     </AppStack.Navigator>
   );
 }

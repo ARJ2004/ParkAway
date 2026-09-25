@@ -12,7 +12,7 @@ import { useAuth } from "../navigation/AuthContext";
 export function PersonaSwitchPill({ active }: { active: "driver" | "owner" }) {
   const theme = useTheme();
   const c = theme.colors;
-  const { selectPersona } = useAuth();
+  const { selectPersona, availablePersonas } = useAuth();
   const [switching, setSwitching] = useState<"driver" | "owner" | null>(null);
 
   async function handlePress(persona: "driver" | "owner") {
@@ -23,6 +23,12 @@ export function PersonaSwitchPill({ active }: { active: "driver" | "owner" }) {
     } finally {
       setSwitching(null);
     }
+  }
+
+  // AC-8: once the host role is revoked, "Owner" disappears from the
+  // switcher entirely — never a segment that leads to a 403 or an empty shell.
+  if (!availablePersonas.includes("owner")) {
+    return null;
   }
 
   return (

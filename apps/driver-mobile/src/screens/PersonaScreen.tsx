@@ -35,6 +35,7 @@ export function PersonaScreen() {
         </Text>
 
         <TouchableOpacity
+          testID="persona-card-driver"
           activeOpacity={0.85}
           onPress={() => pick("driver")}
           disabled={loading !== null}
@@ -49,6 +50,7 @@ export function PersonaScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="persona-card-owner"
           activeOpacity={0.85}
           onPress={() => pick("owner")}
           disabled={loading !== null}

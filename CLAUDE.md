@@ -62,9 +62,16 @@ npm run start --workspace apps/driver-mobile        # Expo dev server — scan t
 npm run test --workspace apps/api                   # unit tests + Testcontainers concurrency tests (needs Docker)
 npm run test --workspace apps/driver-web             # jsdom + React Testing Library
 npm run test --workspace apps/admin-web              # jsdom + React Testing Library
+npm run test --workspace apps/driver-mobile          # Vitest (pure logic) + Jest/RNTL (components), see below
 ```
 
-`apps/driver-mobile` and the `packages/*` have no dedicated test suite yet — `npx tsc --noEmit` (typecheck) and `npx expo export --platform android` (Metro bundle check, catches resolution/bundling errors without a device) are the fastest signal there.
+`apps/driver-mobile` has two separate test runners, split by file extension — don't mix them up:
+- **`*.test.ts` → Vitest** (`vitest.config.ts`) — pure logic with no RN rendering (e.g. `src/location.test.ts`).
+- **`*.test.tsx` → Jest + `@testing-library/react-native`** (`jest.config.js`, preset `jest-expo`) — component rendering/interaction tests.
+
+`packages/*` still have no dedicated test suite — `npx tsc --noEmit` (typecheck) is the fastest signal there.
+
+**A monorepo-specific trap in the mobile Jest setup, if you ever touch `jest.config.js`:** `apps/driver-mobile` pins `react@19.2.3` in its own nested `node_modules`, while the repo root hoists `react@18.3.1` for `driver-web`/`admin-web`. Any RN-testing package that gets hoisted to the root (`@testing-library/react-native`, `test-renderer`, `react-reconciler`) resolves *its* `react` from wherever IT physically lives — which, once hoisted, is the root's react@18, not this app's react@19. Two live React copies means every hook silently breaks (`useContext` returns null, `act()` warnings). Fixed two ways, both needed: (1) those three packages are manually nested under `apps/driver-mobile/node_modules` rather than left at the hoisted root location: `npm install` won't reliably keep them there on its own since there's no version conflict for `npm` to notice, so if `npm install` at the root ever re-hoists them, redo the nesting; (2) `jest.config.js`'s `moduleNameMapper` force-resolves every `react` import to this app's own copy regardless of where the requiring file lives, as a second line of defense. If component tests ever start throwing "Cannot read properties of undefined/null (reading 'S'/'useContext')" again, this is why — check `apps/driver-mobile/node_modules/react-reconciler` and `.../test-renderer` still exist before anything else.
 
 ### Linting
 

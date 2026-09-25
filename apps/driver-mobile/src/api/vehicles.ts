@@ -32,3 +32,15 @@ export function setDefaultVehicle(id: string): Promise<Vehicle> {
 export function deactivateVehicle(id: string): Promise<Vehicle> {
   return apiRequest(`/v1/me/vehicles/${id}`, { method: "PATCH", body: { status: "inactive" } });
 }
+
+export interface UpdateVehicleInput {
+  // Matches the backend's UpdateVehicleParams exactly (apps/api's
+  // vehicle.service.ts) — registrationNo and type are immutable once added
+  // (no route accepts changing them); remove and re-add to correct either.
+  makeModel?: string;
+  isDefault?: boolean;
+}
+
+export function updateVehicle(id: string, patch: UpdateVehicleInput): Promise<Vehicle> {
+  return apiRequest(`/v1/me/vehicles/${id}`, { method: "PATCH", body: patch });
+}

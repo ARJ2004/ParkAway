@@ -19,7 +19,7 @@ export function TextField({ label, error, hint, badge, style, ...rest }: TextFie
         style={[
           styles.input,
           {
-            borderColor: error ? c.danger : c.border,
+            borderColor: error ? c.danger : c.borderStrong,
             backgroundColor: rest.editable === false ? c.background : c.surfaceRaised,
             color: c.textPrimary,
             fontFamily: theme.fonts.body,

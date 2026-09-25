@@ -51,6 +51,9 @@ let revokeAuthorization: typeof import("../../src/modules/property/authorization
 let createListing: typeof import("../../src/modules/listing/listing.service.js").createListing;
 let updateListing: typeof import("../../src/modules/listing/listing.service.js").updateListing;
 let submitForPublication: typeof import("../../src/modules/listing/lifecycle.service.js").submitForPublication;
+let conditionalTransition: typeof import("../../src/modules/listing/lifecycle.service.js").conditionalTransition;
+let LEGAL_TRANSITIONS: typeof import("../../src/modules/listing/lifecycle.service.js").LEGAL_TRANSITIONS;
+let runVerificationExpirySweep: typeof import("../../src/jobs/verificationExpirySweep.js").runVerificationExpirySweep;
 let requestPhotoUploadUrl: typeof import("../../src/modules/listing/photo.service.js").requestPhotoUploadUrl;
 let completePhotoUpload: typeof import("../../src/modules/listing/photo.service.js").completePhotoUpload;
 let updatePhoto: typeof import("../../src/modules/listing/photo.service.js").updatePhoto;
@@ -137,6 +140,11 @@ beforeAll(async () => {
   updateListing = listingMod.updateListing;
   const lifecycleMod = await import("../../src/modules/listing/lifecycle.service.js");
   submitForPublication = lifecycleMod.submitForPublication;
+  conditionalTransition = lifecycleMod.conditionalTransition;
+  LEGAL_TRANSITIONS = lifecycleMod.LEGAL_TRANSITIONS;
+
+  const sweepMod = await import("../../src/jobs/verificationExpirySweep.js");
+  runVerificationExpirySweep = sweepMod.runVerificationExpirySweep;
   const photoMod = await import("../../src/modules/listing/photo.service.js");
   requestPhotoUploadUrl = photoMod.requestPhotoUploadUrl;
   completePhotoUpload = photoMod.completePhotoUpload;
@@ -851,5 +859,106 @@ describe("Payout leak sweep — the full account number appears in no response b
     expect(getRes.statusCode).toBe(200);
     expect(getRes.payload).not.toContain("123456789012");
     expect(JSON.parse(getRes.payload).payoutAccountLast4).toBe("9012");
+  });
+});
+
+describe("R6 — verification-expiry sweep is idempotent under concurrent runs", () => {
+  it("two concurrent sweeps over one already-expired listing: exactly one suspends it, exactly one audit row, and a third run changes nothing", async () => {
+    const { listingId } = await createListingReadyToPublish("+919800300011");
+    const admin = await createTestAdmin("sweep-admin-1@test.com");
+
+    // Approved at exactly the property's required level (2 for `standalone`),
+    // but with an expiry already in the past — the effective level is 0 from
+    // the moment this transaction commits, so the very next sweep must catch it.
+    const pastExpiry = new Date(Date.now() - 60_000).toISOString();
+    await approveListing(db, admin.id, listingId, { level: 2, reasonCategory: "looks_good", expiresAt: pastExpiry }, null);
+
+    const [beforeSweep] = await db.select({ status: listings.status }).from(listings).where(eqFn(listings.id, listingId)).limit(1);
+    expect(beforeSweep?.status).toBe("published");
+
+    // Simulates two overlapping sweep runs (e.g. a slow run plus a manual
+    // re-trigger) racing over the same eligible listing.
+    const [resultA, resultB] = await Promise.all([runVerificationExpirySweep(db), runVerificationExpirySweep(db)]);
+    expect(resultA.suspended + resultB.suspended).toBe(1); // never both, never neither
+
+    const [afterSweep] = await db.select({ status: listings.status, statusReason: listings.statusReason }).from(listings).where(eqFn(listings.id, listingId)).limit(1);
+    expect(afterSweep?.status).toBe("suspended");
+    expect(afterSweep?.statusReason).toBe("verification_expired");
+
+    const expireAudits = await db
+      .select()
+      .from(auditLog)
+      .where(andFn(eqFn(auditLog.action, "listing.verification.expire"), eqFn(auditLog.targetId, listingId)));
+    expect(expireAudits).toHaveLength(1);
+
+    // Idempotence (rule 2 / R6): re-running over a listing that's no longer
+    // `published` must be a true no-op — no further transition, no duplicate audit row.
+    const thirdRun = await runVerificationExpirySweep(db);
+    expect(thirdRun.suspended).toBe(0);
+
+    const [stillSuspended] = await db.select({ status: listings.status }).from(listings).where(eqFn(listings.id, listingId)).limit(1);
+    expect(stillSuspended?.status).toBe("suspended");
+
+    const expireAuditsAfterThirdRun = await db
+      .select()
+      .from(auditLog)
+      .where(andFn(eqFn(auditLog.action, "listing.verification.expire"), eqFn(auditLog.targetId, listingId)));
+    expect(expireAuditsAfterThirdRun).toHaveLength(1);
+  });
+});
+
+describe("Listing lifecycle — full transition matrix (AC-5)", () => {
+  const ALL_STATUSES = ["draft", "pending_verification", "published", "paused", "suspended", "archived"] as const;
+  const pairs = ALL_STATUSES.flatMap((from) => ALL_STATUSES.map((to) => [from, to] as const));
+
+  let matrixUser: Awaited<ReturnType<typeof createTestUser>>;
+  let matrixPropertyId: string;
+  let pairIndex = 0;
+
+  it.each(pairs)("%s -> %s is legal iff LEGAL_TRANSITIONS says so", async (from, to) => {
+    if (!matrixUser) {
+      matrixUser = await createTestUser("+919800300012");
+      const property = await createProperty(db, matrixUser.id, {
+        name: "Matrix test property",
+        propertyType: "standalone",
+        addressLine1: "1 Matrix Street",
+        locality: "Test Locality",
+        city: "Bengaluru",
+        state: "Karnataka",
+        pincode: "560001",
+        location: { lat: 12.9716, lng: 77.5946 },
+        entryLocation: { lat: 12.9716, lng: 77.5946 },
+        outsiderPolicy: "allowed",
+      });
+      matrixPropertyId = property.id;
+    }
+
+    const listing = await createListing(db, matrixUser.id, { propertyId: matrixPropertyId, spaceLabel: `Matrix slot ${pairIndex++}` });
+    // Force the listing directly into the `from` state under test, bypassing
+    // every service-level guard — the matrix must hold at the
+    // `conditionalTransition` primitive itself, independent of how a caller reached that state.
+    await db.update(listings).set({ status: from }).where(eqFn(listings.id, listing.id));
+
+    const isLegal = (LEGAL_TRANSITIONS[from] ?? []).includes(to);
+    const attempt = conditionalTransition(db, listing.id, [from], to);
+
+    if (isLegal) {
+      await expect(attempt).resolves.toMatchObject({ status: to });
+    } else {
+      await expect(attempt).rejects.toBeInstanceOf(ConflictError);
+      const [current] = await db.select({ status: listings.status }).from(listings).where(eqFn(listings.id, listing.id)).limit(1);
+      expect(current?.status).toBe(from); // rejected attempt must never mutate state
+    }
+  });
+
+  it("every state's legal-transition set in LEGAL_TRANSITIONS matches AC-5 exactly", () => {
+    expect(LEGAL_TRANSITIONS).toEqual({
+      draft: ["pending_verification", "archived"],
+      pending_verification: ["published", "suspended"],
+      published: ["paused", "suspended"],
+      paused: ["published", "suspended", "archived"],
+      suspended: ["archived"],
+      archived: [],
+    });
   });
 });

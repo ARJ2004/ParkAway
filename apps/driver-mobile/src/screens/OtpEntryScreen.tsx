@@ -1,4 +1,5 @@
-import { Button, InlineBanner, OtpInput, useTheme } from "@parkaway/ui-native";
+import { Button, IconButton, InlineBanner, OtpInput, useTheme } from "@parkaway/ui-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -21,6 +22,7 @@ const OTP_LENGTH = 6;
 export function OtpEntryScreen({ route, navigation }: Props) {
   const { phone } = route.params;
   const theme = useTheme();
+  const c = theme.colors;
   const { login } = useAuth();
 
   const [code, setCode] = useState("");
@@ -77,30 +79,40 @@ export function OtpEntryScreen({ route, navigation }: Props) {
     }
   }
 
+  const cooldownLabel = `0:${cooldown.toString().padStart(2, "0")}`;
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]}>
       <View style={styles.content}>
-        <Text style={[styles.heading, { color: theme.colors.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>
-          Enter the code
-        </Text>
-        <Text style={[styles.subheading, { color: theme.colors.textSecondary, fontFamily: theme.fonts.body }]}>
-          We sent a code to {phone}
-        </Text>
+        <IconButton accessibilityLabel="Back" onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={15} color={c.textPrimary} />
+        </IconButton>
 
         <View style={styles.form}>
+          <Text style={[styles.heading, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>Enter the code</Text>
+          <Text style={[styles.subheading, { color: c.textMuted }]}>
+            Code sent to {phone} · <Text onPress={() => navigation.goBack()} style={[styles.editLink, { color: c.textPrimary }]}>Edit</Text>
+          </Text>
+
           {error && <InlineBanner variant="danger">{error}</InlineBanner>}
           <OtpInput length={OTP_LENGTH} value={code} onChange={setCode} error={!!error} autoFocus />
-          <Button onPress={() => handleVerify(code)} fullWidth loading={loading} disabled={code.length !== OTP_LENGTH}>
-            Verify
-          </Button>
-          <TouchableOpacity onPress={handleResend} disabled={cooldown > 0}>
-            <Text style={[styles.link, { color: theme.colors.textSecondary }]}>
-              {cooldown > 0 ? `Resend code in ${cooldown}s` : "Resend code"}
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Text style={[styles.link, { color: theme.colors.textSecondary }]}>Change number</Text>
-          </TouchableOpacity>
+
+          <View style={styles.actions}>
+            <Button onPress={() => handleVerify(code)} fullWidth loading={loading} disabled={code.length !== OTP_LENGTH}>
+              Verify
+            </Button>
+            <TouchableOpacity onPress={handleResend} disabled={cooldown > 0}>
+              <Text style={[styles.resendLabel, { color: c.textMuted }]}>
+                {cooldown > 0 ? (
+                  <>
+                    Didn&apos;t get it? Resend in <Text style={{ color: c.textPrimary, fontWeight: "700" }}>{cooldownLabel}</Text>
+                  </>
+                ) : (
+                  "Resend code"
+                )}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -109,9 +121,11 @@ export function OtpEntryScreen({ route, navigation }: Props) {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { flex: 1, justifyContent: "center", paddingHorizontal: 24, gap: 8 },
-  heading: { fontSize: 24, textAlign: "center" },
-  subheading: { fontSize: 14, textAlign: "center", marginBottom: 16 },
-  form: { gap: 16, alignItems: "center" },
-  link: { fontSize: 14, textDecorationLine: "underline", textAlign: "center" },
+  content: { flex: 1, paddingHorizontal: 24, paddingTop: 20 },
+  form: { flex: 1, justifyContent: "center", gap: 24 },
+  heading: { fontSize: 30, lineHeight: 36 },
+  subheading: { fontSize: 13.5, lineHeight: 20, marginTop: -12 },
+  editLink: { textDecorationLine: "underline", fontWeight: "600" },
+  actions: { gap: 16, alignItems: "center" },
+  resendLabel: { fontSize: 12.5, textAlign: "center" },
 });

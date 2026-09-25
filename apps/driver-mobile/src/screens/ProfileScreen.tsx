@@ -1,7 +1,8 @@
-import { Badge, Button, Card, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
+import { Badge, Card, IconButton, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
+import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { logout as apiLogout } from "../api/auth";
 import { ApiError } from "../api/client";
@@ -16,10 +17,10 @@ function initialsOf(name: string | null): string {
 }
 
 /**
- * Avatar + name/phone header, grouped editable fields, sign-out as its own
- * clearly separated destructive row at the bottom — not a button buried in
- * a nav bar. Draws on the Affirm/Freenow/PayPal reference pattern (header
- * card, grouped settings, log-out last), restyled in ParkAway's palette.
+ * Avatar + name/phone header, a big persona-switch card (matches the design
+ * canvas — the switch is important enough to be a card, not a settings
+ * row), grouped editable fields, sign-out as its own clearly separated
+ * destructive row at the bottom.
  *
  * Shared across both `MainTabs` and `OwnerTabs` (deliberately not typed
  * against either tab navigator's param list) — a person's name and phone
@@ -29,7 +30,7 @@ function initialsOf(name: string | null): string {
 export function ProfileScreen() {
   const theme = useTheme();
   const c = theme.colors;
-  const { logout, activePersona, selectPersona } = useAuth();
+  const { logout, activePersona, availablePersonas, selectPersona } = useAuth();
   const [switching, setSwitching] = useState(false);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [name, setName] = useState<string | undefined>(undefined);
@@ -83,12 +84,15 @@ export function ProfileScreen() {
 
   if (!profile) return null;
 
+  const isOwner = activePersona === "owner";
+  const canSwitch = availablePersonas.length > 1;
+
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right"]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <View style={[styles.avatar, { backgroundColor: c.accentSoft }]}>
-            <Text style={[styles.avatarText, { color: c.accent, fontFamily: theme.fonts.headingBold }]}>
+          <View style={[styles.avatar, { backgroundColor: c.textPrimary }]}>
+            <Text style={[styles.avatarText, { color: c.accentSoft, fontFamily: theme.fonts.headingSemibold }]}>
               {initialsOf(profile.name)}
             </Text>
           </View>
@@ -97,15 +101,28 @@ export function ProfileScreen() {
               {profile.name || "Add your name"}
             </Text>
             <View style={styles.phoneRow}>
-              <Text style={[styles.phone, { color: c.textSecondary, fontFamily: theme.fonts.body }]}>{profile.phone}</Text>
+              <Text style={[styles.phone, { color: c.textMuted }]}>{profile.phone}</Text>
               <Badge label="Verified" variant="success" />
             </View>
           </View>
         </View>
 
-        <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>
-          Personal details
-        </Text>
+        {canSwitch && (
+          <TouchableOpacity onPress={handleSwitchPersona} disabled={switching} activeOpacity={0.85}>
+            <View style={[styles.switchCard, { backgroundColor: c.textPrimary }]}>
+              <View style={[styles.switchIconWrap, { backgroundColor: "rgba(255,255,255,0.12)" }]}>
+                <Ionicons name={isOwner ? "car-sport-outline" : "business-outline"} size={18} color={c.accentSoft} />
+              </View>
+              <View style={styles.switchText}>
+                <Text style={styles.switchTitle}>Switch to {isOwner ? "parking" : "hosting"}</Text>
+                <Text style={styles.switchHint}>{isOwner ? "Find and book a guaranteed spot" : "List a space and start earning"}</Text>
+              </View>
+              {switching ? <ActivityIndicator color="#FFFFFF" /> : <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.5)" />}
+            </View>
+          </TouchableOpacity>
+        )}
+
+        <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Personal details</Text>
         <Card style={styles.card}>
           {error && <InlineBanner variant="danger">{error}</InlineBanner>}
           {saved && <InlineBanner variant="success">Saved.</InlineBanner>}
@@ -118,33 +135,17 @@ export function ProfileScreen() {
             onChangeText={setEmail}
             placeholder="you@example.com"
           />
-          <Button onPress={handleSave} loading={loading}>
-            Save changes
-          </Button>
+          <TouchableOpacity onPress={handleSave} disabled={loading} style={[styles.saveButton, { backgroundColor: c.textPrimary }]}>
+            {loading ? <ActivityIndicator color={c.background} /> : <Text style={[styles.saveLabel, { color: c.background }]}>Save changes</Text>}
+          </TouchableOpacity>
         </Card>
 
-        <Text style={[styles.sectionLabel, { color: c.textMuted, fontFamily: theme.fonts.bodyMedium }]}>Mode</Text>
-        <Card style={styles.card}>
-          <View style={styles.modeRow}>
-            <View style={styles.modeText}>
-              <Text style={[styles.modeLabel, { color: c.textPrimary, fontFamily: theme.fonts.bodySemibold }]}>
-                {activePersona === "owner" ? "Owner mode" : "Driver mode"}
-              </Text>
-              <Text style={[styles.modeHint, { color: c.textMuted, fontFamily: theme.fonts.body }]}>
-                {activePersona === "owner" ? "Managing your parking spaces" : "Finding and booking parking"}
-              </Text>
-            </View>
-            <Button variant="secondary" onPress={handleSwitchPersona} loading={switching}>
-              {`Switch to ${activePersona === "owner" ? "driver" : "owner"}`}
-            </Button>
-          </View>
-        </Card>
-
-        <Card style={[styles.signOutCard, { borderColor: c.dangerSoft }]}>
-          <Button variant="danger" fullWidth onPress={handleLogout}>
-            Sign out
-          </Button>
-        </Card>
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutRow}>
+          <IconButton accessibilityLabel="Log out" variant="outline">
+            <Ionicons name="log-out-outline" size={16} color={c.danger} />
+          </IconButton>
+          <Text style={[styles.logoutLabel, { color: c.danger }]}>Log out</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -152,18 +153,22 @@ export function ProfileScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },
-  content: { padding: 24, gap: 20 },
-  header: { flexDirection: "row", alignItems: "center", gap: 16 },
-  avatar: { width: 60, height: 60, borderRadius: 30, alignItems: "center", justifyContent: "center" },
-  avatarText: { fontSize: 20 },
+  content: { padding: 20, gap: 18, paddingBottom: 40 },
+  header: { flexDirection: "row", alignItems: "center", gap: 14 },
+  avatar: { width: 58, height: 58, borderRadius: 999, alignItems: "center", justifyContent: "center" },
+  avatarText: { fontSize: 21 },
   name: { fontSize: 19 },
   phoneRow: { flexDirection: "row", alignItems: "center", gap: 8, marginTop: 2 },
-  phone: { fontSize: 14 },
-  sectionLabel: { fontSize: 12, textTransform: "uppercase", letterSpacing: 0.6, marginTop: 4 },
+  phone: { fontSize: 12 },
+  switchCard: { borderRadius: 18, padding: 16, flexDirection: "row", alignItems: "center", gap: 14 },
+  switchIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  switchText: { flex: 1, gap: 2 },
+  switchTitle: { fontSize: 14.5, fontWeight: "700", color: "#FFFFFF" },
+  switchHint: { fontSize: 11.5, color: "rgba(255,255,255,0.6)" },
+  sectionLabel: { fontSize: 11, textTransform: "uppercase", letterSpacing: 1, fontWeight: "700" },
   card: { gap: 16 },
-  modeRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
-  modeText: { flex: 1, gap: 2 },
-  modeLabel: { fontSize: 15 },
-  modeHint: { fontSize: 12 },
-  signOutCard: { borderWidth: 1, backgroundColor: "transparent", padding: 4 },
+  saveButton: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center" },
+  saveLabel: { fontSize: 15, fontWeight: "700" },
+  logoutRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 10, paddingVertical: 8 },
+  logoutLabel: { fontSize: 13.5, fontWeight: "700" },
 });

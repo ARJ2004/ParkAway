@@ -1,9 +1,11 @@
-import { Button, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
+import { Eyebrow, IconButton, InlineBanner, TextField, useTheme } from "@parkaway/ui-native";
+import { Ionicons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useState } from "react";
-import { ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ApiError } from "../../api/client";
+import { createListing } from "../../api/listings";
 import { createProperty, type LatLng } from "../../api/properties";
 import { LocationField } from "../../components/LocationField";
 import type { OwnerStackParamList } from "../../navigation/RootNavigator";
@@ -19,6 +21,8 @@ const PROPERTY_TYPES = [
  * The reduced, owner-persona version of property creation — no
  * authorization step, since `independent_home`/`standalone` properties are
  * self-authorized in the same transaction as creation (locked decision 4).
+ * Saving immediately creates a first (draft) listing under it and opens the
+ * wizard — "Save & add a space" is literal, not just copy.
  */
 export function PropertyFormScreen({ navigation }: Props) {
   const theme = useTheme();
@@ -43,7 +47,7 @@ export function PropertyFormScreen({ navigation }: Props) {
     setError(null);
     setLoading(true);
     try {
-      await createProperty({
+      const property = await createProperty({
         name,
         propertyType,
         addressLine1,
@@ -55,7 +59,8 @@ export function PropertyFormScreen({ navigation }: Props) {
         entryLocation: location,
         outsiderPolicy: outsidersAllowed ? "allowed" : "disallowed",
       });
-      navigation.replace("OwnerTabs");
+      const listing = await createListing({ propertyId: property.id, spaceLabel: name });
+      navigation.replace("ListingWizard", { listingId: listing.id, step: "fit" });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Could not save the property — please try again.");
     } finally {
@@ -64,24 +69,34 @@ export function PropertyFormScreen({ navigation }: Props) {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["left", "right", "bottom"]}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.background }]} edges={["top", "left", "right", "bottom"]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.heading, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>Add a property</Text>
+        <View style={styles.header}>
+          <IconButton accessibilityLabel="Back" onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={15} color={c.textPrimary} />
+          </IconButton>
+          <Text style={[styles.heading, { color: c.textPrimary, fontFamily: theme.fonts.headingSemibold }]}>Add a property</Text>
+        </View>
+
+        <Text style={[styles.intro, { color: c.textMuted }]}>
+          A property is the address itself — a home, a gated community, a lot. You&apos;ll add individual parking spaces to it next.
+        </Text>
+
         {error && <InlineBanner variant="danger">{error}</InlineBanner>}
 
-        <View style={styles.chipRow}>
-          {PROPERTY_TYPES.map((t) => (
-            <Text
-              key={t.value}
-              onPress={() => setPropertyType(t.value)}
-              style={[
-                styles.chip,
-                { borderColor: c.border, backgroundColor: propertyType === t.value ? c.textPrimary : c.surface, color: propertyType === t.value ? c.background : c.textSecondary },
-              ]}
-            >
-              {t.label}
-            </Text>
-          ))}
+        <View style={styles.section}>
+          <Eyebrow color={c.textMuted}>Property type</Eyebrow>
+          <View style={styles.chipRow}>
+            {PROPERTY_TYPES.map((t) => (
+              <TouchableOpacity
+                key={t.value}
+                onPress={() => setPropertyType(t.value)}
+                style={[styles.chip, { borderColor: propertyType === t.value ? c.textPrimary : c.borderStrong, backgroundColor: propertyType === t.value ? c.textPrimary : c.surface }]}
+              >
+                <Text style={[styles.chipLabel, { color: propertyType === t.value ? c.background : c.textSecondary }]}>{t.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
         <TextField label="Property name" value={name} onChangeText={setName} placeholder="e.g. My driveway" />
@@ -99,17 +114,24 @@ export function PropertyFormScreen({ navigation }: Props) {
 
         <LocationField label="Location" value={location} onChange={setLocation} hint="Tap 'Use my current location' or enter coordinates directly." />
 
-        <View style={styles.switchRow}>
+        <View style={[styles.switchRow, { borderColor: c.borderStrong }]}>
           <View style={styles.switchText}>
-            <Text style={[styles.switchLabel, { color: c.textPrimary, fontFamily: theme.fonts.bodyMedium }]}>Allow anyone to book this space</Text>
+            <Text style={[styles.switchLabel, { color: c.textPrimary }]}>Allow anyone to book this space</Text>
             <Text style={[styles.switchHint, { color: c.textMuted }]}>Turn off if only people you&apos;ve personally authorized should see or book it.</Text>
           </View>
-          <Switch value={outsidersAllowed} onValueChange={setOutsidersAllowed} trackColor={{ true: c.accent }} />
+          <Switch value={outsidersAllowed} onValueChange={setOutsidersAllowed} trackColor={{ true: c.success, false: c.border }} />
         </View>
 
-        <Button onPress={handleSubmit} loading={loading} fullWidth>
-          Save property
-        </Button>
+        <TouchableOpacity onPress={handleSubmit} disabled={loading} style={[styles.submitButton, { backgroundColor: c.textPrimary }]}>
+          {loading ? (
+            <ActivityIndicator color={c.background} />
+          ) : (
+            <>
+              <Text style={[styles.submitLabel, { color: c.background }]}>Save &amp; add a space</Text>
+              <Ionicons name="arrow-forward" size={14} color={c.background} />
+            </>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -118,13 +140,19 @@ export function PropertyFormScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   safe: { flex: 1 },
   content: { padding: 20, gap: 16, paddingBottom: 48 },
-  heading: { fontSize: 22 },
-  chipRow: { gap: 8 },
-  chip: { borderWidth: 1, borderRadius: 12, padding: 14, fontSize: 14, fontWeight: "600", overflow: "hidden" },
+  header: { flexDirection: "row", alignItems: "center", gap: 12 },
+  heading: { fontSize: 19 },
+  intro: { fontSize: 13, lineHeight: 19, marginTop: -4 },
+  section: { gap: 10 },
+  chipRow: { flexDirection: "row", gap: 10 },
+  chip: { flex: 1, borderWidth: 1.5, borderRadius: 14, padding: 12 },
+  chipLabel: { fontSize: 12.5, fontWeight: "700" },
   row: { flexDirection: "row", gap: 12 },
   rowField: { flex: 1 },
-  switchRow: { flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 8 },
+  switchRow: { flexDirection: "row", alignItems: "center", gap: 12, borderWidth: 1, borderRadius: 14, padding: 14 },
   switchText: { flex: 1, gap: 2 },
-  switchLabel: { fontSize: 14 },
-  switchHint: { fontSize: 12 },
+  switchLabel: { fontSize: 13.5, fontWeight: "700" },
+  switchHint: { fontSize: 11.5, lineHeight: 16 },
+  submitButton: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: 12, paddingVertical: 16 },
+  submitLabel: { fontSize: 15, fontWeight: "700" },
 });

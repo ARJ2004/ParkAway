@@ -10,6 +10,8 @@ interface AuthContextValue {
   /** null = still resolving personas after login; only meaningful once isLoggedIn is true. */
   personaPending: boolean;
   activePersona: Persona | null;
+  /** Which personas the server currently grants this user — drives AC-8 (hide/route away from a revoked persona). */
+  availablePersonas: Persona[];
   isNewUserPending: boolean;
   login: (isNewUser: boolean) => Promise<void>;
   selectPersona: (persona: Persona) => Promise<void>;
@@ -24,13 +26,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [checkingSession, setCheckingSession] = useState(true);
   const [personaPending, setPersonaPending] = useState(false);
   const [activePersona, setActivePersona] = useState<Persona | null>(null);
+  const [availablePersonas, setAvailablePersonas] = useState<Persona[]>(["driver"]);
   const [isNewUserPending, setIsNewUserPending] = useState(false);
 
   async function resolvePersonaState() {
     const personas = await getPersonas();
+    setAvailablePersonas(personas.available);
     if (personas.lastPersona === null) {
       setPersonaPending(true);
       setActivePersona(null);
+    } else if (personas.lastPersona === "owner" && !personas.available.includes("owner")) {
+      // AC-8: the host role was revoked since this user's last session — the
+      // owner dashboard must never reappear on load; land on driver instead.
+      setPersonaPending(false);
+      setActivePersona("driver");
     } else {
       setPersonaPending(false);
       setActivePersona(personas.lastPersona);
@@ -59,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     checkingSession,
     personaPending,
     activePersona,
+    availablePersonas,
     isNewUserPending,
     login: async (isNewUser) => {
       setIsLoggedIn(true);
@@ -68,12 +78,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     selectPersona: async (persona) => {
       const result = await apiSelectPersona(persona);
       setPersonaPending(false);
+      setAvailablePersonas(result.available);
       setActivePersona(result.lastPersona);
     },
     logout: () => {
       setIsLoggedIn(false);
       setPersonaPending(false);
       setActivePersona(null);
+      setAvailablePersonas(["driver"]);
       setIsNewUserPending(false);
     },
     wizardFinished: () => setIsNewUserPending(false),
